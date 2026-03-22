@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { MetricCard } from "@/components/MetricCard";
 import { BillingChart } from "@/components/BillingChart";
@@ -13,8 +13,38 @@ import {
 
 export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // 1. ESTADO PARA DADOS REAIS
+  const [realStats, setRealStats] = useState({
+    faturacaoTotal: 0,
+    pendentes: 0,
+    qtdPendentes: 0,
+    novosClientes: 0,
+    taxaConversao: 100
+  });
 
-  // Definição dos tipos que alimentam o preenchimento específico
+  // 2. LÓGICA DE CÁLCULO
+  useEffect(() => {
+    // Buscar coleções do sistema
+    const faturas = JSON.parse(localStorage.getItem("system_invoices") || "[]");
+    const clientes = JSON.parse(localStorage.getItem("system_clients") || "[]");
+
+    // Calcular Total (Apenas faturas pagas ou emitidas - FT e FR)
+    const total = faturas.reduce((acc: number, cur: any) => acc + (Number(cur.total) || 0), 0);
+
+    // Calcular Pendentes (Exemplo: faturas do tipo FT que ainda não foram convertidas)
+    const pendentesList = faturas.filter((f: any) => f.status === "Pendente");
+    const totalPendentes = pendentesList.reduce((acc: number, cur: any) => acc + (Number(cur.total) || 0), 0);
+
+    setRealStats({
+      faturacaoTotal: total,
+      pendentes: totalPendentes,
+      qtdPendentes: pendentesList.length,
+      novosClientes: clientes.length,
+      taxaConversao: faturas.length > 0 ? 100 : 0
+    });
+  }, []);
+
   const documentTypes = [
     { id: "FT", name: "Fatura (FT)", icon: FileText, desc: "Venda a crédito padrão", color: "bg-blue-50 text-blue-600" },
     { id: "FR", name: "Fatura Recibo (FR)", icon: FileCheck, desc: "Venda pronto a pagamento", color: "bg-green-50 text-green-600" },
@@ -26,7 +56,6 @@ export default function Home() {
 
   return (
     <div className="space-y-6 p-6 md:p-8 lg:p-10 relative">
-      {/* CABEÇALHO DO DASHBOARD (Sem alterações estruturais) */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-black tracking-tight text-slate-900 uppercase italic">Dashboard</h2>
@@ -46,7 +75,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* O MODAL É ONDE A EDIÇÃO DO TIPO ACONTECE */}
+      {/* MODAL SELEÇÃO DOCUMENTO */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
           <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
@@ -64,7 +93,7 @@ export default function Home() {
               {documentTypes.map((doc) => (
                 <Link 
                   key={doc.id} 
-                  href={`/invoices/create?type=${doc.id}`}
+                  href={`/documents/create?type=${doc.id}`}
                   className="flex items-start gap-4 p-5 rounded-[2rem] border border-slate-100 hover:border-slate-900 hover:bg-slate-50 transition-all group"
                   onClick={() => setIsModalOpen(false)}
                 >
@@ -88,12 +117,35 @@ export default function Home() {
         </div>
       )}
 
-      {/* CARDS E GRÁFICOS (Permanecem iguais) */}
+      {/* CARDS COM DADOS REAIS DO LOCALSTORAGE */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <MetricCard title="Faturação Total" value="Kz 24.500.000" trend="+20.1% este mês" trendUp={true} icon={DollarSign} />
-        <MetricCard title="Faturas Pendentes" value="Kz 2.350.000" description="5 faturas" icon={FileText} />
-        <MetricCard title="Novos Clientes" value="+12" trend="+4 novos hoje" trendUp={true} icon={Users} />
-        <MetricCard title="Taxa de Conversão" value="98%" trend="-1.2% este mês" trendUp={false} icon={TrendingUp} />
+        <MetricCard 
+          title="Faturação Total" 
+          value={`${realStats.faturacaoTotal.toLocaleString()} Kz`} 
+          trend="+ Reais" 
+          trendUp={true} 
+          icon={DollarSign} 
+        />
+        <MetricCard 
+          title="Faturas Pendentes" 
+          value={`${realStats.pendentes.toLocaleString()} Kz`} 
+          description={`${realStats.qtdPendentes} documentos`} 
+          icon={FileText} 
+        />
+        <MetricCard 
+          title="Clientes Ativos" 
+          value={realStats.novosClientes.toString()} 
+          trend="Total na base" 
+          trendUp={true} 
+          icon={Users} 
+        />
+        <MetricCard 
+          title="Eficiência" 
+          value={`${realStats.taxaConversao}%` } 
+          trend="Sincronizado" 
+          trendUp={true} 
+          icon={TrendingUp} 
+        />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">

@@ -49,6 +49,7 @@ export default function LoginForm() {
 
             // Simulação de sucesso: guarda sessão e redireciona
             localStorage.setItem("user_session", JSON.stringify({ email, role: "admin" }));
+            document.cookie = "user_session=true; path=/; max-age=86400"; // Expira em 24h
             window.location.href = "/dashboard";
         }, 1500);
     };
