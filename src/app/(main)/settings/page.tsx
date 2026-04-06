@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from "@/lib/supabase"; // Importação da conexão
 import { 
   Camera, Building2, CreditCard, Save, Globe, 
   Mail, Phone, MapPin, Landmark, Plus, Trash2, 
@@ -10,6 +11,7 @@ import {
 export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const [formData, setFormData] = useState({
     nomeEmpresa: '',
@@ -23,24 +25,43 @@ export default function SettingsPage() {
     bancos: [{ banco: '', numeroConta: '', iban: '' }]
   });
 
-  // CARREGAR DADOS COM SEGURANÇA
+  // 1. CARREGAR DADOS DO SUPABASE
   useEffect(() => {
-    const savedData = localStorage.getItem('empresa_config');
-    if (savedData) {
+    async function loadProfile() {
+      setLoading(true);
       try {
-        const parsed = JSON.parse(savedData);
-        // O "||" garante que se o campo não existir, o código não quebra
-        setFormData({
-          ...parsed,
-          bancos: parsed.bancos || [{ banco: '', numeroConta: '', iban: '' }]
-        });
-        setIsEditing(false);
+        // Busca o primeiro perfil (Num SaaS real usaríamos .eq('id', user.id))
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .maybeSingle();
+
+        if (data) {
+          const mappedData = {
+            nomeEmpresa: data.nome_empresa || '',
+            nif: data.nif || '',
+            regimeIva: data.regime_iva || 'exclusao',
+            endereco: data.endereco || '',
+            telefone: data.telefone_empresa || '',
+            email: data.email_empresa || '',
+            website: data.website || '',
+            logo: data.logo_url || '',
+            bancos: data.bancos || [{ banco: '', numeroConta: '', iban: '' }]
+          };
+          setFormData(mappedData);
+          // Manter o localStorage atualizado para compatibilidade com as outras páginas
+          localStorage.setItem('empresa_config', JSON.stringify(mappedData));
+          setIsEditing(false);
+        } else {
+          setIsEditing(true);
+        }
       } catch (e) {
-        console.error("Erro ao carregar dados");
+        console.error("Erro ao carregar dados da nuvem");
+      } finally {
+        setLoading(false);
       }
-    } else {
-      setIsEditing(true);
     }
+    loadProfile();
   }, []);
 
   // GESTÃO DE BANCOS
@@ -62,12 +83,12 @@ export default function SettingsPage() {
     setFormData(prev => ({ ...prev, bancos: updated }));
   };
 
-  // UPLOAD DE LOGO
+  // UPLOAD DE LOGO (Base64 para compatibilidade simples por enquanto)
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert("O ficheiro excede o limite de 2MB!");
+      if (file.size > 5 * 1024 * 1024) {
+        alert("O ficheiro excede o limite de 5MB para sincronização rápida!");
         return;
       }
       const reader = new FileReader();
@@ -78,16 +99,48 @@ export default function SettingsPage() {
     }
   };
 
-  // GUARDAR
-  const handleSave = () => {
+  // 2. GUARDAR NO SUPABASE
+  const handleSave = async () => {
     if (!formData.nomeEmpresa || !formData.nif) {
       alert("Por favor, preencha o Nome da Empresa e o NIF.");
       return;
     }
-    localStorage.setItem('empresa_config', JSON.stringify(formData));
-    setIsEditing(false);
-    alert("Configurações atualizadas com sucesso!");
+
+    setLoading(true);
+    try {
+      // Buscamos o ID do perfil atual se existir
+      const { data: existing } = await supabase.from('profiles').select('id').maybeSingle();
+
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: existing?.id, // Se existir, ele faz update. Se não, gera um novo (em produção usaríamos user_id)
+          nome_empresa: formData.nomeEmpresa,
+          nif: formData.nif,
+          regime_iva: formData.regimeIva,
+          endereco: formData.endereco,
+          telefone_empresa: formData.telefone,
+          email_empresa: formData.email,
+          website: formData.website,
+          logo_url: formData.logo,
+          bancos: formData.bancos
+        });
+
+      if (error) throw error;
+
+      localStorage.setItem('empresa_config', JSON.stringify(formData));
+      setIsEditing(false);
+      alert("✓ Perfil sincronizado com a nuvem!");
+    } catch (error: any) {
+      alert("Erro ao guardar dados: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (loading && !isEditing) {
+    return <div className="p-20 text-center font-black animate-pulse uppercase tracking-widest text-slate-300">Sincronizando com a Nuvem...</div>;
+  }
 
   // --- MODO VISUALIZAÇÃO ---
   if (!isEditing) {
@@ -104,7 +157,6 @@ export default function SettingsPage() {
             </button>
           </header>
 
-          {/* Card Resumo Identidade */}
           <div className="bg-white p-8 rounded-3xl border shadow-sm flex gap-8">
             <div className="w-32 h-32 bg-slate-100 rounded-2xl flex items-center justify-center overflow-hidden border">
               {formData.logo ? <img src={formData.logo} className="w-full h-full object-contain p-2" /> : <Building2 className="text-slate-300" size={40} />}
@@ -120,7 +172,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Resumo Bancário com Prefixo IBAN: */}
           <div className="bg-white p-8 rounded-3xl border shadow-sm">
             <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><CreditCard size={18} className="text-green-600"/> Contas Bancárias</h3>
             <div className="grid gap-4">
@@ -129,7 +180,7 @@ export default function SettingsPage() {
                   <div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{b.banco || "Banco"}</p>
                     <p className="font-mono font-bold text-slate-700">
-                       <span className="text-slate-400 mr-2">IBAN:</span>{b.iban || "---"}
+                        <span className="text-slate-400 mr-2">IBAN:</span>{b.iban || "---"}
                     </p>
                   </div>
                   <p className="text-sm font-bold text-slate-500">Conta: {b.numeroConta || "---"}</p>
@@ -151,7 +202,6 @@ export default function SettingsPage() {
             <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-slate-600 text-sm font-bold">Cancelar</button>
         </header>
 
-        {/* LOGO */}
         <section className="bg-white p-6 rounded-2xl border shadow-sm">
           <h2 className="font-bold mb-4 flex items-center gap-2 text-slate-800"><Camera size={20} className="text-blue-600"/> Logótipo da Empresa</h2>
           <div className="flex items-center gap-6">
@@ -161,12 +211,11 @@ export default function SettingsPage() {
             <div className="flex flex-col gap-2">
               <input type="file" ref={fileInputRef} onChange={handleLogoUpload} accept="image/*" className="hidden" />
               <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold hover:bg-slate-50 transition shadow-sm">Upload Foto</button>
-              <p className="text-[10px] text-red-500 font-black uppercase italic tracking-widest">Aviso: Máximo 2MB (PNG/JPG)</p>
+              <p className="text-[10px] text-red-500 font-black uppercase italic tracking-widest">Aviso: Máximo 5MB para Sincronização</p>
             </div>
           </div>
         </section>
 
-        {/* IDENTIDADE E SITE */}
         <section className="bg-white p-6 rounded-2xl border shadow-sm space-y-6">
           <h2 className="font-bold flex items-center gap-2 text-slate-800"><Globe size={20} className="text-blue-600"/> Identidade e Website</h2>
           <div className="grid md:grid-cols-2 gap-5">
@@ -188,7 +237,7 @@ export default function SettingsPage() {
             </div>
             <div className="md:col-span-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Website</label>
-              <input value={formData.website} onChange={e => setFormData({...formData, website: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold" placeholder="www.bolaemcampo.ao" />
+              <input value={formData.website} onChange={e => setFormData({...formData, website: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold" placeholder="www.minhaempresa.ao" />
             </div>
             <div className="md:col-span-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Morada Completa</label>
@@ -205,7 +254,6 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* BANCOS MÚLTIPLOS COM PLACEHOLDER NO IBAN */}
         <section className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
           <div className="flex justify-between items-center mb-4">
             <h2 className="font-bold flex items-center gap-2 text-slate-800"><CreditCard size={20} className="text-green-600"/> Informações Bancárias</h2>
@@ -230,7 +278,7 @@ export default function SettingsPage() {
                   <input 
                     value={b.iban} 
                     onChange={e => updateBanco(i, 'iban', e.target.value)} 
-                    placeholder="AO06.0000.0000.0000.0000.0" // Placeholder adicionado
+                    placeholder="AO06.0000..." 
                     className="w-full p-2.5 rounded-xl border-slate-200 outline-none text-sm font-bold shadow-sm" 
                   />
                   {formData.bancos.length > 1 && (
@@ -242,8 +290,12 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <button onClick={handleSave} className="w-full flex items-center justify-center gap-2 bg-[#0f172a] text-white py-5 rounded-2xl font-black uppercase italic tracking-widest hover:bg-slate-800 transition shadow-2xl active:scale-95">
-          <Save size={20} /> Guardar e Atualizar Perfil
+        <button 
+          onClick={handleSave} 
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 bg-[#0f172a] text-white py-5 rounded-2xl font-black uppercase italic tracking-widest hover:bg-slate-800 transition shadow-2xl active:scale-95 disabled:opacity-50"
+        >
+          <Save size={20} /> {loading ? "Sincronizando..." : "Guardar e Atualizar Perfil"}
         </button>
       </div>
     </div>

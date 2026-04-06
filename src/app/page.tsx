@@ -63,42 +63,47 @@ export default function LandingPage() {
 
             <main className="flex-1">
                 {/* HERO SECTION */}
-                <section id="hero" className="relative w-full bg-[#0f172a] pt-12 pb-32 md:pt-24 md:pb-48 overflow-hidden">
-                    <div className="container mx-auto px-4 md:px-6 relative z-10">
-                        <div className="grid lg:grid-cols-2 gap-12 items-center">
-                            <div className="space-y-6 max-w-2xl">
-                                <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl text-white leading-tight">
-                                    A Gestão do seu Negócio <br />
-                                    <span className="text-slate-300">em boas mãos.</span>
-                                </h1>
-                                <p className="text-lg text-slate-400 md:text-xl font-light max-w-lg">
-                                    Faturação online certificada pela AGT. Simples, poderosa e feita para o mercado angolano.
-                                </p>
-                                <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                                    <Link
-                                        href="/register"
-                                        className="inline-flex h-12 items-center justify-center rounded-md bg-white px-8 text-base font-bold text-[#0f172a] shadow hover:bg-slate-200 transition-colors"
-                                    >
-                                        Começar Agora
-                                    </Link>
-                                </div>
-                            </div>
-                            <div className="relative h-[400px] lg:h-[500px] w-full rounded-2xl overflow-hidden shadow-2xl border-4 border-white/5">
-                                <Image
-                                    src="/images/about-team.png"
-                                    alt="Profissionais Angolanos"
-                                    fill
-                                    className="object-cover"
-                                    priority
-                                />
-                            </div>
-                        </div>
-                    </div>
+               <section id="hero" className="relative w-full bg-[#0f172a] pt-12 pb-32 md:pt-24 md:pb-48 overflow-hidden">
+    <div className="container mx-auto px-4 md:px-6 relative z-10">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div className="space-y-6 max-w-2xl">
+                <div className="inline-flex items-center rounded-full bg-blue-500/10 px-3 py-1 text-sm font-medium text-blue-400 ring-1 ring-inset ring-blue-500/20">
+                    Novo: Exportação SAFT-AO em 1 clique
+                </div>
+                <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl text-white leading-tight">
+                    A Gestão do seu Negócio <br />
+                    <span className="text-blue-500">em boas mãos.</span>
+                </h1>
+                <p className="text-lg text-slate-400 md:text-xl font-light max-w-lg">
+                    Faturação online certificada pela AGT. Simples, poderosa e feita para o mercado angolano.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                    <Link
+                        href="/register"
+                        className="inline-flex h-12 items-center justify-center rounded-md bg-blue-600 px-8 text-base font-bold text-white shadow-lg hover:bg-blue-500 transition-all transform hover:scale-105"
+                    >
+                        Começar Agora
+                    </Link>
+                </div>
+            </div>
 
-                    {/* BACKGROUND DECORATION */}
-                    <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 w-[800px] h-[800px] bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-                    <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/4 w-[600px] h-[600px] bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
-                </section>
+            {/* AQUI ENTRA A TUA ILUSTRAÇÃO (+Facturas Mockup) */}
+            <div className="relative h-[400px] lg:h-[550px] w-full flex items-center justify-center">
+                <div className="relative w-full h-full drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-float">
+                    <Image
+                        src="/images/ilustration.png" 
+                        alt="Interface do +Facturas em múltiplos dispositivos"
+                        fill
+                        className="object-contain"
+                        priority
+                    />
+                </div>
+                {/* Elementos decorativos atrás da imagem */}
+                <div className="absolute -z-10 h-[300px] w-[300px] bg-blue-600/20 rounded-full blur-[120px]" />
+            </div>
+        </div>
+    </div>
+</section>
 
                 {/* SEGMENTATION SECTION (OVERLAP) */}
                 <section className="relative z-20 -mt-24 pb-20">

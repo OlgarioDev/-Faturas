@@ -3,19 +3,21 @@
 import React, { useState, useEffect } from "react";
 import { Loader2, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { validateEmail } from "@/lib/auth-validation";
+import { supabase } from "@/lib/supabase"; // 1. Importa a nossa ligação
+import { useRouter } from "next/navigation";
 
 export default function LoginForm() {
+    const router = useRouter();
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
 
-    // 1. Lógica para carregar e-mail guardado (Lembrar-me)
+    // Lógica para carregar e-mail guardado
     useEffect(() => {
         const savedEmail = localStorage.getItem("remembered_email");
         if (savedEmail) {
             setRememberMe(true);
-            // Poderíamos pré-preencher o campo aqui se usássemos um estado para o email
         }
     }, []);
 
@@ -28,10 +30,10 @@ export default function LoginForm() {
         const email = formData.get("email") as string;
         const password = formData.get("password") as string;
 
-        // Validações básicas
+        // Validações básicas de UI
         let newErrors: Record<string, string> = {};
         if (!validateEmail(email)) newErrors.email = "Introduza um e-mail válido.";
-        if (password.length < 4) newErrors.password = "A password é obrigatória.";
+        if (password.length < 6) newErrors.password = "A password deve ter pelo menos 6 caracteres.";
 
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
@@ -39,23 +41,46 @@ export default function LoginForm() {
             return;
         }
 
-        // 2. Simulação de Autenticação
-        setTimeout(() => {
+        // 2. AUTENTICAÇÃO REAL COM SUPABASE
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+
+            if (error) {
+                // Caso o Supabase retorne erro (Senha errada, user não existe, etc)
+                setErrors({ auth: error.message });
+                setIsLoading(false);
+                return;
+            }
+
+            // Lógica do "Lembrar-me"
             if (rememberMe) {
                 localStorage.setItem("remembered_email", email);
             } else {
                 localStorage.removeItem("remembered_email");
             }
 
-            // Simulação de sucesso: guarda sessão e redireciona
-            localStorage.setItem("user_session", JSON.stringify({ email, role: "admin" }));
-            document.cookie = "user_session=true; path=/; max-age=86400"; // Expira em 24h
-            window.location.href = "/dashboard";
-        }, 1500);
+            // Sucesso: O Supabase já cria o Cookie de sessão sozinho.
+            // Redirecionamos para o dashboard
+            router.push("/dashboard");
+            
+        } catch (err) {
+            setErrors({ auth: "Ocorreu um erro inesperado ao tentar entrar." });
+            setIsLoading(false);
+        }
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Mensagem de Erro Geral da Autenticação */}
+            {errors.auth && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
+                    <p className="text-red-500 text-[10px] font-black uppercase text-center">{errors.auth}</p>
+                </div>
+            )}
+
             {/* Campo E-mail */}
             <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail Profissional</label>
@@ -77,7 +102,7 @@ export default function LoginForm() {
             <div className="space-y-1.5">
                 <div className="flex justify-between items-center px-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Password</label>
-                    <a href="#" className="text-[10px] font-black text-blue-600 uppercase hover:underline">Esqueceu a senha?</a>
+                    <button type="button" className="text-[10px] font-black text-blue-600 uppercase hover:underline">Esqueceu a senha?</button>
                 </div>
                 <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />

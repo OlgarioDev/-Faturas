@@ -18,63 +18,73 @@ export function BillingChart() {
         // 1. Buscar faturas reais do localStorage
         const savedInvoices = JSON.parse(localStorage.getItem("system_invoices") || "[]");
 
-        // 2. Definir os últimos 7 meses (podes ajustar para ser dinâmico)
-        const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul"];
+        // 2. Definir os nomes dos meses
+        const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
         // 3. Processar os dados: Somar o total de faturas para cada mês
-        const processedData = months.map(month => {
-            const totalMonth = savedInvoices
-                .filter((inv: any) => {
-                    // Assume que inv.date é uma string como "22 Mar 2026"
-                    return inv.date && inv.date.includes(month);
-                })
-                .reduce((sum: number, inv: any) => sum + (Number(inv.total) || 0), 0);
+        // Criamos um array de 12 posições (0 a 11) preenchido com zeros
+        const monthlyTotals = new Array(12).fill(0).map((_, idx) => ({
+            name: monthNames[idx],
+            total: 0
+        }));
 
-            return {
-                name: month,
-                total: totalMonth
-            };
+        savedInvoices.forEach((inv: any) => {
+            if (!inv.date) return;
+
+            let monthIndex = -1;
+
+            // Tenta converter a data (funciona para "2026-04-05" ou "2026/04/05")
+            const dateObj = new Date(inv.date);
+            
+            if (!isNaN(dateObj.getTime())) {
+                monthIndex = dateObj.getMonth();
+            } else {
+                // Caso a data esteja em formato de texto "Abr", tenta por texto
+                monthIndex = monthNames.findIndex(m => inv.date.includes(m));
+            }
+
+            if (monthIndex !== -1) {
+                const valor = Number(inv.total) || 0;
+                // Se for Nota de Crédito, subtraímos do gráfico para manter a precisão
+                if (inv.type === "NC") {
+                    monthlyTotals[monthIndex].total -= valor;
+                } else {
+                    monthlyTotals[monthIndex].total += valor;
+                }
+            }
         });
 
-        // 4. Se não houver faturas, mantemos valores base para o gráfico não ficar vazio (opcional)
-        const hasData = processedData.some(d => d.total > 0);
-        if (!hasData) {
-            setChartData([
-                { name: "Jan", total: 0 },
-                { name: "Fev", total: 0 },
-                { name: "Mar", total: 0 },
-                { name: "Abr", total: 0 },
-                { name: "Mai", total: 0 },
-                { name: "Jun", total: 0 },
-                { name: "Jul", total: 0 },
-            ]);
-        } else {
-            setChartData(processedData);
-        }
+        // 4. Filtramos para mostrar apenas até ao mês atual para o gráfico não ficar vazio à direita
+        const currentMonth = new Date().getMonth();
+        const displayData = monthlyTotals.slice(0, currentMonth + 1);
+
+        setChartData(displayData);
     }, []);
 
     return (
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-            <div className="p-6 flex flex-col space-y-1.5">
-                <h3 className="font-semibold leading-none tracking-tight">Faturação Mensal</h3>
-                <p className="text-sm text-muted-foreground">Visão geral baseada em documentos emitidos</p>
+        <div className="rounded-[2.5rem] border bg-white text-card-foreground shadow-sm overflow-hidden">
+            <div className="p-8 flex flex-col space-y-1.5">
+                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Faturação Mensal</h3>
+                <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Dados Sincronizados em Tempo Real</p>
             </div>
-            <div className="p-6 pt-0 pl-0">
-                <div className="h-[350px] w-full">
+            <div className="p-6 pt-0">
+                <div className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-slate-200" />
+                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                             <XAxis
                                 dataKey="name"
-                                stroke="#888888"
-                                fontSize={12}
+                                stroke="#94a3b8"
+                                fontSize={10}
+                                fontWeight="bold"
                                 tickLine={false}
                                 axisLine={false}
                                 dy={10}
                             />
                             <YAxis
-                                stroke="#888888"
-                                fontSize={12}
+                                stroke="#94a3b8"
+                                fontSize={10}
+                                fontWeight="bold"
                                 tickLine={false}
                                 axisLine={false}
                                 tickFormatter={(value) => {
@@ -84,21 +94,26 @@ export function BillingChart() {
                                 }}
                             />
                             <Tooltip
-                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                                formatter={(value: any) =>
-                                    new Intl.NumberFormat("pt-AO", {
-                                        style: "currency",
-                                        currency: "AOA",
-                                    }).format(Number(value))
-                                }
+                                contentStyle={{ 
+                                    borderRadius: '20px', 
+                                    border: 'none', 
+                                    boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
+                                    fontSize: '12px',
+                                    fontWeight: 'bold'
+                                }}
+                                formatter={(value: any) => [
+                                    `${Number(value).toLocaleString()} Kz`,
+                                    "Total Faturado"
+                                ]}
                             />
                             <Line
                                 type="monotone"
                                 dataKey="total"
-                                stroke="#0f172a" // slate-900 para combinar com a sidebar
-                                strokeWidth={3}
-                                dot={{ r: 4, fill: "#0f172a", strokeWidth: 2, stroke: "#fff" }}
-                                activeDot={{ r: 6, strokeWidth: 0 }}
+                                stroke="#2563eb" // Azul Vibrante
+                                strokeWidth={4}
+                                dot={{ r: 6, fill: "#2563eb", strokeWidth: 3, stroke: "#fff" }}
+                                activeDot={{ r: 8, strokeWidth: 0 }}
+                                animationDuration={1500}
                             />
                         </LineChart>
                     </ResponsiveContainer>
