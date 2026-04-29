@@ -19,14 +19,25 @@ def require_auth(f):
             f"{os.getenv('SUPABASE_URL')}/auth/v1/user",
             headers={
                 "Authorization": f"Bearer {token}",
-                "apikey": os.getenv('SUPABASE_ANON_KEY')
+                "apikey": os.getenv('NEXT_PUBLIC_SUPABASE_ANON_KEY', os.getenv('SUPABASE_ANON_KEY'))
             }
         )
 
         if res.status_code != 200:
-            return jsonify({"error": "Token inválido ou expirado"}), 401
+            print("Supabase Error:", res.status_code, res.text)
+            return jsonify({"error": f"Token inválido ou expirado: {res.text}"}), 401
 
         request.current_user = res.json()
+
+        # Verifica se o utilizador está suspenso na base de dados
+        supabase_id = request.current_user.get('id')
+        if supabase_id:
+            user = User.query.filter_by(supabase_auth_id=supabase_id).first()
+            if user and hasattr(user, 'status'):
+                status_str = getattr(user.status, 'value', str(user.status)).lower()
+                if 'suspended' in status_str:
+                    return jsonify({"error": "Conta Suspensa. Contacte o suporte."}), 403
+
         return f(*args, **kwargs)
 
     return decorated

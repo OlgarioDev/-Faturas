@@ -17,10 +17,12 @@ def create_app(config_name="dev"):
     from .routes.admin import admin_bp
     from .routes.invoices import invoices_bp
     from .routes.insights import insights_bp
+    from .routes.auth import auth_bp
     
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(invoices_bp, url_prefix='/api/invoices')
     app.register_blueprint(insights_bp, url_prefix='/api/insights')
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
 
     @app.route('/')
     def index():

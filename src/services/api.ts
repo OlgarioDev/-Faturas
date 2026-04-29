@@ -48,6 +48,10 @@ export const insightsApi = {
     apiFetch(`/insights/churn-risk/${company_id}`),
 };
 
+export const authApi = {
+  syncProfile: () => apiFetch('/auth/sync', { method: 'POST' }),
+};
+
 export const adminApi = {
   getStats: () => apiFetch('/admin/dashboard'),
   getUsers: () => apiFetch('/admin/users'),

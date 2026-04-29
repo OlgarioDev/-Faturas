@@ -57,10 +57,27 @@ export default function LoginForm() {
 
             console.log("Login com sucesso!", data);
 
-            // Definir o cookie para o Middleware (proxy.ts) permitir o acesso
-            if (data.session) {
-                document.cookie = `user_session=${data.session.access_token}; path=/; max-age=86400`;
-                localStorage.setItem("user_session", JSON.stringify(data.user)); // Guarda user para a sidebar
+            // Sincronizar com o backend Flask para garantir que a conta existe nas tabelas e obter o role correto
+            try {
+                const { authApi } = await import('@/services/api');
+                const syncResponse = await authApi.syncProfile();
+                
+                // Definir o cookie para o Middleware (proxy.ts) permitir o acesso
+                if (data.session) {
+                    document.cookie = `user_session=${data.session.access_token}; path=/; max-age=86400`;
+                    // Guarda user (misturando dados do supabase com role real do backend) para a sidebar
+                    const userData = { ...data.user, role: syncResponse.user?.role || "user" };
+                    localStorage.setItem("user_session", JSON.stringify(userData)); 
+                }
+            } catch (syncError: any) {
+                console.error("Erro na sincronização:", syncError);
+                if (syncError.message?.includes("Suspensa")) {
+                    setErrors({ email: "A sua conta foi suspensa. Contacte o administrador." });
+                } else {
+                    setErrors({ root: "Erro de ligação ao servidor (Sincronização falhou). Certifique-se que o backend está a correr." });
+                }
+                setIsLoading(false);
+                return;
             }
 
             // Lógica do "Lembrar-me"
