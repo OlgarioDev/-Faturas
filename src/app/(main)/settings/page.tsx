@@ -30,10 +30,20 @@ export default function SettingsPage() {
     async function loadProfile() {
       setLoading(true);
       try {
-        // Busca o primeiro perfil (Num SaaS real usaríamos .eq('id', user.id))
+        // Obter o utilizador atual
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id;
+
+        if (!userId) {
+            setLoading(false);
+            return;
+        }
+
+        // Busca o perfil do utilizador autenticado
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
+          .eq('id', userId)
           .maybeSingle();
 
         if (data) {
@@ -108,13 +118,20 @@ export default function SettingsPage() {
 
     setLoading(true);
     try {
-      // Buscamos o ID do perfil atual se existir
-      const { data: existing } = await supabase.from('profiles').select('id').maybeSingle();
+      // Obter o ID do utilizador logado
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+
+      if (!userId) {
+          alert("Sessão expirada ou utilizador não autenticado.");
+          setLoading(false);
+          return;
+      }
 
       const { error } = await supabase
         .from('profiles')
         .upsert({
-          id: existing?.id, // Se existir, ele faz update. Se não, gera um novo (em produção usaríamos user_id)
+          id: userId,
           nome_empresa: formData.nomeEmpresa,
           nif: formData.nif,
           regime_iva: formData.regimeIva,

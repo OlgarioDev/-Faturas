@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import { validateNIF, validateEmail, validatePassword } from "@/lib/auth-validation";
+import { supabase } from "@/lib/supabase";
 
 export default function RegisterPage() {
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -18,7 +19,7 @@ export default function RegisterPage() {
         const data = Object.fromEntries(formData);
 
         // Validações Lógicas
-        let newErrors: Record<string, string> = {};
+        const newErrors: Record<string, string> = {};
 
         if (!data.companyName) newErrors.companyName = "Nome da empresa é obrigatório.";
         if (!validateNIF(data.nif as string)) newErrors.nif = "NIF inválido (use 9 ou 10 dígitos).";
@@ -32,18 +33,35 @@ export default function RegisterPage() {
             return;
         }
 
-        // Simulação de registo e persistência inicial
-        setTimeout(() => {
-            const newUser = {
-                name: data.companyName,
-                email: data.email,
-                nif: data.nif,
-                role: "Administrador",
-                plan: "Standard"
-            };
-            localStorage.setItem("user_session", JSON.stringify(newUser));
-            window.location.href = "/dashboard";
-        }, 1500);
+        try {
+            // 1. REGISTO NO SUPABASE AUTH
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+                email: (data.email as string).trim(),
+                password: data.password as string,
+                options: {
+                    data: {
+                        company_name: (data.companyName as string).trim(),
+                        nif: (data.nif as string).trim(),
+                    }
+                }
+            });
+
+            if (authError) throw authError;
+
+            // 2. SUCESSO OU UTILIZADOR JÁ EXISTE
+            if (authData.user) {
+                alert(`✓ Conta ${authData.user.email} criada com sucesso! Já podes entrar.`);
+                window.location.href = "/login";
+            } else {
+                alert("⚠️ Este e-mail já está registado! Por favor, faz login em vez de criar uma conta nova.");
+                window.location.href = "/login";
+            }
+
+        } catch (error: any) {
+            setErrors({ email: "Erro ao criar conta no servidor: " + error.message });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -80,7 +98,7 @@ export default function RegisterPage() {
                     </div>
                     
                     <div className="bg-white/5 border border-white/10 p-5 rounded-2xl text-[11px] leading-relaxed text-slate-400 italic relative z-10">
-                        "O +Facturas ajuda centenas de empresas angolanas a manterem a conformidade fiscal com simplicidade e rapidez."
+                        O +Facturas ajuda centenas de empresas angolanas a manterem a conformidade fiscal com simplicidade e rapidez.
                     </div>
 
                     {/* Decoração de fundo */}
@@ -183,7 +201,7 @@ export default function RegisterPage() {
                     </form>
 
                     <p className="mt-8 text-center text-[10px] text-slate-400 font-bold uppercase leading-relaxed tracking-tighter">
-                        Ao clicar em "Criar Conta", concorda com os nossos <br />
+                        Ao clicar em Criar Conta, concorda com os nossos <br />
                         <span className="text-blue-600 cursor-pointer underline">Termos de Serviço</span> e <span className="text-blue-600 cursor-pointer underline">Política de Privacidade</span>.
                     </p>
                 </div>

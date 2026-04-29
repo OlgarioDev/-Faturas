@@ -27,7 +27,7 @@ export default function LoginForm() {
         setErrors({});
 
         const formData = new FormData(e.currentTarget);
-        const email = formData.get("email") as string;
+        const email = (formData.get("email") as string).trim();
         const password = formData.get("password") as string;
 
         // Validações básicas de UI
@@ -49,24 +49,33 @@ export default function LoginForm() {
             });
 
             if (error) {
-                // Caso o Supabase retorne erro (Senha errada, user não existe, etc)
+                console.error("Erro do Supabase:", error);
                 setErrors({ auth: error.message });
                 setIsLoading(false);
                 return;
             }
 
+            console.log("Login com sucesso!", data);
+
+            // Definir o cookie para o Middleware (proxy.ts) permitir o acesso
+            if (data.session) {
+                document.cookie = `user_session=${data.session.access_token}; path=/; max-age=86400`;
+                localStorage.setItem("user_session", JSON.stringify(data.user)); // Guarda user para a sidebar
+            }
+
             // Lógica do "Lembrar-me"
             if (rememberMe) {
-                localStorage.setItem("remembered_email", email);
+                localStorage.setItem("remembered_email", email.trim());
             } else {
                 localStorage.removeItem("remembered_email");
             }
 
             // Sucesso: O Supabase já cria o Cookie de sessão sozinho.
-            // Redirecionamos para o dashboard
-            router.push("/dashboard");
+            // Redirecionamos para o dashboard (forçando recarregamento para limpar estados presos)
+            window.location.href = "/dashboard";
             
         } catch (err) {
+            console.error("Erro inesperado:", err);
             setErrors({ auth: "Ocorreu um erro inesperado ao tentar entrar." });
             setIsLoading(false);
         }

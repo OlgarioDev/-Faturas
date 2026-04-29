@@ -8,8 +8,9 @@ import { RecentInvoices } from "@/components/RecentInvoices";
 import { 
   DollarSign, FileText, Users, TrendingUp, Plus, 
   Download, FileCheck, ArrowLeftRight, FileCode, X,
-  AlertCircle, LayoutTemplate, MousePointer2
+  AlertCircle, LayoutTemplate, MousePointer2, Activity
 } from "lucide-react";
+import { getChurnRisk } from "@/services/api";
 
 interface InvoiceData {
   id: string;
@@ -30,7 +31,9 @@ export default function Home() {
     pendentes: 0,
     qtdPendentes: 0,
     novosClientes: 0,
-    taxaConversao: 0
+    taxaConversao: 0,
+    churnScore: 0,
+    churnRecommendation: ""
   });
 
   // ESTADO PARA O GRÁFICO (Array de 12 meses)
@@ -74,10 +77,26 @@ export default function Home() {
       pendentes: totalPendentes,
       qtdPendentes: pendentesList.length,
       novosClientes: clientes.length,
-      taxaConversao: faturas.length > 0 ? 100 : 0
+      taxaConversao: faturas.length > 0 ? 100 : 0,
+      churnScore: 0,
+      churnRecommendation: ""
     });
 
     setMonthlyData(totalsByMonth);
+
+    // Call API to get churn risk
+    const fetchChurn = async () => {
+      // Usar um company_id estático para já (ex: 1)
+      const data = await getChurnRisk(1);
+      if (data && data.risk_score !== undefined) {
+        setRealStats(prev => ({
+          ...prev,
+          churnScore: data.risk_score,
+          churnRecommendation: data.recommendation || ""
+        }));
+      }
+    };
+    fetchChurn();
   }, []);
 
   // FUNÇÃO PARA EXPORTAR SAFT-AO (NORMA AGT)
@@ -215,11 +234,11 @@ export default function Home() {
           icon={Users} 
         />
         <MetricCard 
-          title="Eficiência" 
-          value={`${realStats.taxaConversao}%` } 
-          trend="Sincronizado" 
-          trendUp={true} 
-          icon={TrendingUp} 
+          title="Risco de Churn" 
+          value={realStats.churnScore > 0 ? `${(realStats.churnScore * 100).toFixed(0)}%` : '---'} 
+          trend={realStats.churnRecommendation ? realStats.churnRecommendation.substring(0, 20) + '...' : 'Análise IA em curso'} 
+          trendUp={realStats.churnScore < 0.5} 
+          icon={Activity} 
         />
       </div>
 

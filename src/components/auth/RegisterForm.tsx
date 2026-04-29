@@ -17,9 +17,9 @@ export default function RegisterForm() {
         setErrors({});
 
         const formData = new FormData(e.currentTarget);
-        const email = formData.get("email") as string;
-        const nif = formData.get("nif") as string;
-        const companyName = formData.get("companyName") as string;
+        const email = (formData.get("email") as string).trim();
+        const nif = (formData.get("nif") as string).trim();
+        const companyName = (formData.get("companyName") as string).trim();
         const password = formData.get("password") as string;
         const confirmPassword = formData.get("confirmPassword") as string;
 
@@ -53,9 +53,13 @@ export default function RegisterForm() {
 
             if (authError) throw authError;
 
-            // 2. SUCESSO
+            // 2. SUCESSO OU UTILIZADOR JÁ EXISTE
             if (data.user) {
-                alert("✓ Conta criada com sucesso! Já podes entrar.");
+                alert(`✓ Conta ${data.user.email} criada com sucesso! (Projeto: ${process.env.NEXT_PUBLIC_SUPABASE_URL}). Já podes entrar.`);
+                router.push("/login");
+            } else {
+                // Supabase retorna sucesso sem utilizador se o email já estiver registado
+                alert("⚠️ Este e-mail já está registado! Por favor, faz login em vez de criar uma conta nova.");
                 router.push("/login");
             }
 

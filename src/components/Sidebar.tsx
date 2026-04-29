@@ -98,6 +98,21 @@ export function Sidebar() {
                     );
                 })}
 
+                {userData.role === "super_admin" && (
+                    <Link
+                        href="/admin"
+                        className={cn(
+                            "group flex items-center rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 mt-4",
+                            pathname === "/admin" 
+                                ? "bg-purple-600 text-white shadow-lg shadow-purple-900/20" 
+                                : "text-purple-400 hover:bg-slate-800 hover:text-white"
+                        )}
+                    >
+                        <Settings className="mr-3 h-5 w-5 flex-shrink-0" />
+                        Administração
+                    </Link>
+                )}
+
                 <button
                     onClick={handleLogout}
                     className="w-full group flex items-center rounded-lg px-4 py-2.5 text-sm font-bold text-red-400 hover:bg-red-500/10 transition-all duration-200 mt-4 outline-none"
