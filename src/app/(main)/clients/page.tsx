@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Search, Mail, Phone, Trash2, Edit2, X, Save, AlertTriangle, MapPin } from "lucide-react";
 // IMPORTANTE: Se o erro do proxy.ts persistir, confirma se tens o "export" antes do "const apiFetch" no teu ficheiro src/proxy.ts
-import { apiFetch } from "@/proxy"; 
+import { apiFetch } from "@/lib/api";
 
 // Interface para os dados como o Frontend/UI os usa
 interface ClientData {
