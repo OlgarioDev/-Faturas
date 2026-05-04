@@ -11,6 +11,9 @@ class Product(db.Model):
     name = db.Column(db.String(255), nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
     
+    # Campo adicionado para alinhar com o Frontend e exigências AGT (SAF-T ProductType)
+    product_type = db.Column(db.String(20), nullable=False, default='Serviço') 
+    
     # Dados Fiscais Críticos para a AGT
     tax_type = db.Column(db.String(10), nullable=False, default='IVA') 
     tax_percentage = db.Column(db.Float, nullable=False, default=14.0) 
