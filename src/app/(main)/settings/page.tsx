@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from "@/lib/supabase"; // Importação da conexão
+import { apiFetch } from "@/services/api";
 import { 
   Camera, Building2, CreditCard, Save, Globe, 
   Mail, Phone, MapPin, Landmark, Plus, Trash2, 
@@ -25,48 +25,34 @@ export default function SettingsPage() {
     bancos: [{ banco: '', numeroConta: '', iban: '' }]
   });
 
-  // 1. CARREGAR DADOS DO SUPABASE
+  // 1. CARREGAR DADOS DO BACKEND
   useEffect(() => {
     async function loadProfile() {
       setLoading(true);
       try {
-        // Obter o utilizador atual
-        const { data: { session } } = await supabase.auth.getSession();
-        const userId = session?.user?.id;
-
-        if (!userId) {
-            setLoading(false);
-            return;
-        }
-
-        // Busca o perfil do utilizador autenticado
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
-
+        const data = await apiFetch('/settings/company/');
+        
         if (data) {
           const mappedData = {
-            nomeEmpresa: data.nome_empresa || '',
+            nomeEmpresa: data.nomeEmpresa || '',
             nif: data.nif || '',
-            regimeIva: data.regime_iva || 'exclusao',
+            regimeIva: data.tax_regime || 'exclusao',
             endereco: data.endereco || '',
-            telefone: data.telefone_empresa || '',
-            email: data.email_empresa || '',
+            telefone: data.phone || '',
+            email: data.email || '',
             website: data.website || '',
             logo: data.logo_url || '',
             bancos: data.bancos || [{ banco: '', numeroConta: '', iban: '' }]
           };
           setFormData(mappedData);
-          // Manter o localStorage atualizado para compatibilidade com as outras páginas
           localStorage.setItem('empresa_config', JSON.stringify(mappedData));
           setIsEditing(false);
         } else {
           setIsEditing(true);
         }
       } catch (e) {
-        console.error("Erro ao carregar dados da nuvem");
+        console.error("Erro ao carregar dados do Backend");
+        setIsEditing(true);
       } finally {
         setLoading(false);
       }
@@ -109,7 +95,7 @@ export default function SettingsPage() {
     }
   };
 
-  // 2. GUARDAR NO SUPABASE
+  // 2. GUARDAR NO BACKEND
   const handleSave = async () => {
     if (!formData.nomeEmpresa || !formData.nif) {
       alert("Por favor, preencha o Nome da Empresa e o NIF.");
@@ -118,36 +104,14 @@ export default function SettingsPage() {
 
     setLoading(true);
     try {
-      // Obter o ID do utilizador logado
-      const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
-
-      if (!userId) {
-          alert("Sessão expirada ou utilizador não autenticado.");
-          setLoading(false);
-          return;
-      }
-
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: userId,
-          nome_empresa: formData.nomeEmpresa,
-          nif: formData.nif,
-          regime_iva: formData.regimeIva,
-          endereco: formData.endereco,
-          telefone_empresa: formData.telefone,
-          email_empresa: formData.email,
-          website: formData.website,
-          logo_url: formData.logo,
-          bancos: formData.bancos
-        });
-
-      if (error) throw error;
+      await apiFetch('/settings/company/', {
+        method: 'PUT',
+        body: JSON.stringify(formData)
+      });
 
       localStorage.setItem('empresa_config', JSON.stringify(formData));
       setIsEditing(false);
-      alert("✓ Perfil sincronizado com a nuvem!");
+      alert("✓ Perfil sincronizado com o Backend!");
     } catch (error: any) {
       alert("Erro ao guardar dados: " + error.message);
     } finally {

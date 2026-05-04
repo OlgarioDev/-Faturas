@@ -14,18 +14,20 @@ def require_auth(f):
 
         token = auth_header.split(' ')[1]
 
+        api_key = os.getenv('NEXT_PUBLIC_SUPABASE_ANON_KEY') or os.getenv('SUPABASE_ANON_KEY')
+        
         # Valida o token com o Supabase
         res = requests.get(
             f"{os.getenv('SUPABASE_URL')}/auth/v1/user",
             headers={
                 "Authorization": f"Bearer {token}",
-                "apikey": os.getenv('NEXT_PUBLIC_SUPABASE_ANON_KEY', os.getenv('SUPABASE_ANON_KEY'))
+                "apikey": api_key or ''
             }
         )
 
         if res.status_code != 200:
             print("Supabase Error:", res.status_code, res.text)
-            return jsonify({"error": f"Token inválido ou expirado: {res.text}"}), 401
+            return jsonify({"error": f"Token inválido ou expirado: {res.text}. API_KEY_USED: {api_key[:10] if api_key else 'None'}..."}), 401
 
         request.current_user = res.json()
 
@@ -33,6 +35,7 @@ def require_auth(f):
         supabase_id = request.current_user.get('id')
         if supabase_id:
             user = User.query.filter_by(supabase_auth_id=supabase_id).first()
+            request.user_obj = user # Attach the user object
             if user and hasattr(user, 'status'):
                 status_str = getattr(user.status, 'value', str(user.status)).lower()
                 if 'suspended' in status_str:

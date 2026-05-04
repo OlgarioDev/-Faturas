@@ -15,6 +15,11 @@ class Company(db.Model):
     nif = db.Column(db.String(20), unique=True, nullable=False)
     tax_regime = db.Column(db.String(50))
     address = db.Column(db.Text)
+    email = db.Column(db.String(120))
+    phone = db.Column(db.String(50))
+    website = db.Column(db.String(255))
+    logo_url = db.Column(db.Text) # Base64 for now
+    bank_info = db.Column(db.JSON) # List of bank accounts
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     users = db.relationship('User', backref='company', lazy=True)

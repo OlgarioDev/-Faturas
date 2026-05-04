@@ -12,6 +12,8 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+import { apiFetch } from "@/services/api";
+
 interface ExtendedInvoice {
   id: string;
   clientName: string;
@@ -20,7 +22,7 @@ interface ExtendedInvoice {
   subtotal: number;
   taxAmount: number; 
   total: number;
-  status: "Emitida" | "Rascunho" | "Paga" | "Anulada";
+  status: string;
 }
 
 export default function ReportsPage() {
@@ -36,20 +38,26 @@ export default function ReportsPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    const saved = localStorage.getItem("system_invoices");
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        setInvoices(data.map((inv: any) => ({
-          ...inv,
-          subtotal: Number(inv.subtotal) || Number(inv.total) / 1.14,
-          taxAmount: Number(inv.taxAmount) || Number(inv.total) * 0.14,
-          total: Number(inv.total) || 0,
-          employeeName: inv.employeeName || "Administrador"
-        })));
-      } catch (e) { console.error("Erro ao processar dados", e); }
-    }
+    fetchData();
   }, []);
+
+  const fetchData = async () => {
+    try {
+      const data = await apiFetch('/invoices/');
+      setInvoices(data.map((inv: any) => ({
+        id: inv.invoice_no,
+        clientName: inv.client_name,
+        employeeName: "Administrador",
+        date: inv.invoice_date,
+        subtotal: Number(inv.total_amount) - Number(inv.tax_amount || 0),
+        taxAmount: Number(inv.tax_amount || 0),
+        total: Number(inv.total_amount),
+        status: inv.status
+      })));
+    } catch (e) {
+      console.error("Erro ao carregar faturas da API", e);
+    }
+  };
 
   // LÓGICA DE FILTRAGEM EVOLUÍDA
   const filteredInvoices = invoices.filter(inv => {
@@ -195,8 +203,9 @@ export default function ReportsPage() {
           {[
             { id: "financeiro", label: "Tesouraria", icon: DollarSign },
             { id: "vendas", label: "Performance", icon: Briefcase },
-            { id: "fiscal", label: "Fiscal / AGT", icon: Landmark }
-          ].map((tab) => (
+            { id: "fiscal", label: "Fiscal / AGT", icon: Landmark },
+            { id: "global", label: "Relatório Global (Admin)", icon: Users, adminOnly: true }
+          ].filter(t => !t.adminOnly || localStorage.getItem('user_role') === 'super_admin').map((tab) => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex items-center gap-3 px-8 py-4 rounded-2xl text-[10px] font-black transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-[#0f172a] text-white shadow-xl' : 'bg-white text-slate-400 border border-slate-100 shadow-sm hover:text-slate-600'}`}><tab.icon size={14}/> {tab.label.toUpperCase()}</button>
           ))}
         </div>
@@ -222,10 +231,16 @@ export default function ReportsPage() {
         <div className="bg-white rounded-[3rem] border border-slate-200 shadow-sm overflow-hidden mb-10">
           <div className="px-10 py-6 border-b flex justify-between items-center bg-slate-50/50">
             <h3 className="text-[10px] font-black text-[#0f172a] uppercase tracking-widest flex items-center gap-2">
-              <BarChart size={14}/> Documentação Analítica do Período
+              <BarChart size={14}/> {activeTab === 'global' ? 'Performance Global de Empresas' : 'Documentação Analítica do Período'}
             </h3>
           </div>
           <div className="overflow-x-auto">
+            {activeTab === 'global' ? (
+                <div className="p-20 text-center space-y-4">
+                    <p className="font-black text-slate-300 uppercase tracking-widest">Relatório Consolidado em Preparação...</p>
+                    <p className="text-xs text-slate-400">Esta vista permite analisar a rentabilidade de todos os parceiros do ecossistema.</p>
+                </div>
+            ) : (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] border-b">
@@ -262,6 +277,7 @@ export default function ReportsPage() {
                 )}
               </tbody>
             </table>
+            )}
           </div>
         </div>
       </div>

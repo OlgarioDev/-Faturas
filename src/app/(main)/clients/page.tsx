@@ -2,63 +2,123 @@
 
 import React, { useState, useEffect } from "react";
 import { Plus, Search, Mail, Phone, Trash2, Edit2, X, Save, AlertTriangle, MapPin } from "lucide-react";
+// IMPORTANTE: Se o erro do proxy.ts persistir, confirma se tens o "export" antes do "const apiFetch" no teu ficheiro src/proxy.ts
+import { apiFetch } from "@/proxy"; 
+
+// Interface para os dados como o Frontend/UI os usa
+interface ClientData {
+  id: string;
+  nome: string;
+  nif: string;
+  telefone: string;
+  email: string;
+  endereco: string;
+  status: string;
+}
+
+// Interface para os dados como o Backend/Python os devolve
+interface APIClient {
+  id: string;
+  name: string;
+  nif: string;
+  phone: string;
+  email: string;
+  address: string;
+  city?: string;
+}
 
 export default function ClientsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [clientToDelete, setClientToDelete] = useState<number | null>(null);
-  const [editingId, setEditingId] = useState<number | null>(null);
   
-  const [clients, setClients] = useState<any[]>([]);
+  // IDs agora são strings (UUID do PostgreSQL)
+  const [clientToDelete, setClientToDelete] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  
+  const [clients, setClients] = useState<ClientData[]>([]);
   const [formData, setFormData] = useState({ nome: "", nif: "", telefone: "", email: "", endereco: "" });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const userRole = "Administrador";
+  const userRole = "Administrador"; // Idealmente virá do teu contexto de Auth
+
+  // 1. LER CLIENTES DA API
+  const fetchClients = async () => {
+    try {
+      setIsLoading(true);
+      const data = await apiFetch("/api/clients/");
+      
+      // Mapear os dados do backend para o formato que a tua UI espera
+      const formattedClients = data.map((c: APIClient) => ({
+        id: c.id,
+        nome: c.name,
+        nif: c.nif || "Consumidor Final",
+        telefone: c.phone || "",
+        email: c.email || "",
+        endereco: c.address || "",
+        status: "Ativo" // Default para a UI
+      }));
+      
+      setClients(formattedClients);
+    } catch (error) {
+      console.error("Erro ao carregar clientes:", error);
+      alert("Não foi possível carregar a lista de clientes.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const savedClients = localStorage.getItem("facturas_clients");
-    
-    if (savedClients) {
-      setClients(JSON.parse(savedClients));
-    } else {
-      // DADOS DE TESTE (Apenas se a lista estiver vazia)
-      const demoClients = [
-        { id: 101, nome: "Unitel S.A.", nif: "5417000512", telefone: "923000111", email: "apoio@unitel.co.ao", endereco: "Rua Rainha Ginga, Edifício Unitel, Luanda", status: "Ativo" },
-        { id: 102, nome: "ZAP Angola", nif: "5401122334", telefone: "912000222", email: "geral@zap.co.ao", endereco: "Talantona, Condomínio Dolce Vita, Luanda", status: "Ativo" },
-        { id: 103, nome: "ENSA Seguros", nif: "5403344556", telefone: "222333444", email: "info@ensa.ao", endereco: "Avenida 4 de Fevereiro, n.º 93, Luanda", status: "Ativo" }
-      ];
-      setClients(demoClients);
-      localStorage.setItem("facturas_clients", JSON.stringify(demoClients));
-    }
+    fetchClients();
   }, []);
 
-  // Filtro de procura em tempo real
   const filteredClients = clients.filter(client => 
     client.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
     client.nif.includes(searchTerm)
   );
 
-  const handleSave = (e: React.FormEvent) => {
+  // 2. CRIAR OU ATUALIZAR CLIENTE NA API
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    let updatedClients;
+    
+    // Preparar payload com os nomes de colunas do backend
+    const payload = {
+      name: formData.nome,
+      nif: formData.nif,
+      phone: formData.telefone,
+      email: formData.email,
+      address: formData.endereco,
+      city: "Luanda" // Podes adicionar um campo cidade no formulário depois
+    };
 
-    if (editingId) {
-      updatedClients = clients.map(c => c.id === editingId ? { ...formData, id: c.id, status: c.status } : c);
-    } else {
-      const newClient = { ...formData, id: Date.now(), status: "Ativo" };
-      updatedClients = [...clients, newClient];
+    try {
+      if (editingId) {
+        // Atualizar existente
+        await apiFetch(`/api/clients/${editingId}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        // Criar novo
+        await apiFetch("/api/clients/", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+      
+      await fetchClients(); // Recarregar a lista da BD
+      closeModal();
+    } catch (error) {
+      console.error("Erro ao guardar cliente:", error);
+      alert("Ocorreu um erro ao guardar o cliente.");
     }
-
-    setClients(updatedClients);
-    localStorage.setItem("facturas_clients", JSON.stringify(updatedClients));
-    closeModal();
   };
 
-  const openEditModal = (client: any) => {
+  const openEditModal = (client: ClientData) => {
     setEditingId(client.id);
     setFormData({ 
       nome: client.nome, 
-      nif: client.nif, 
+      nif: client.nif === "Consumidor Final" ? "" : client.nif, 
       telefone: client.telefone, 
       email: client.email,
       endereco: client.endereco || "" 
@@ -72,7 +132,7 @@ export default function ClientsPage() {
     setFormData({ nome: "", nif: "", telefone: "", email: "", endereco: "" });
   };
 
-  const confirmDelete = (id: number) => {
+  const confirmDelete = (id: string) => {
     if (userRole !== "Administrador") {
       alert("Apenas o Administrador tem permissão para eliminar clientes.");
       return;
@@ -81,13 +141,21 @@ export default function ClientsPage() {
     setIsDeleteModalOpen(true);
   };
 
-  const handleDelete = () => {
-    if (clientToDelete) {
-      const filtered = clients.filter(c => c.id !== clientToDelete);
-      setClients(filtered);
-      localStorage.setItem("facturas_clients", JSON.stringify(filtered));
+  // 3. ELIMINAR CLIENTE NA API
+  const handleDelete = async () => {
+    if (!clientToDelete) return;
+
+    try {
+      await apiFetch(`/api/clients/${clientToDelete}`, {
+        method: "DELETE",
+      });
+      
+      await fetchClients(); // Recarregar a lista
       setIsDeleteModalOpen(false);
       setClientToDelete(null);
+    } catch (error) {
+      console.error("Erro ao eliminar cliente:", error);
+      alert("Ocorreu um erro ao eliminar o cliente.");
     }
   };
 
@@ -106,7 +174,7 @@ export default function ClientsPage() {
           </button>
         </div>
 
-        {/* CAMPO DE PROCURA ATUALIZADO */}
+        {/* CAMPO DE PROCURA */}
         <div className="relative group max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
           <input 
@@ -129,8 +197,10 @@ export default function ClientsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredClients.length === 0 ? (
-                <tr><td colSpan={3} className="px-6 py-10 text-center text-slate-400 italic">Nenhum cliente encontrado para "{searchTerm}".</td></tr>
+              {isLoading ? (
+                <tr><td colSpan={3} className="px-6 py-10 text-center text-slate-400 italic">A carregar clientes...</td></tr>
+              ) : filteredClients.length === 0 ? (
+                <tr><td colSpan={3} className="px-6 py-10 text-center text-slate-400 italic">Nenhum cliente encontrado.</td></tr>
               ) : (
                 filteredClients.map((client) => (
                   <tr key={client.id} className="hover:bg-slate-50 transition-colors group">
@@ -167,7 +237,7 @@ export default function ClientsPage() {
             <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl animate-in zoom-in duration-200">
               <div className="p-6 border-b flex justify-between items-center bg-slate-50 rounded-t-3xl">
                 <h2 className="text-xl font-bold text-slate-900">{editingId ? "Editar Cliente" : "Registar Novo Cliente"}</h2>
-                <button onClick={closeModal} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={20}/></button>
+                <button type="button" onClick={closeModal} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={20}/></button>
               </div>
               <form onSubmit={handleSave} className="p-6 space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">

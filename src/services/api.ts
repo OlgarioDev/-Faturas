@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
 
-async function apiFetch(endpoint: string, options?: RequestInit) {
+export async function apiFetch(endpoint: string, options?: RequestInit) {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
 

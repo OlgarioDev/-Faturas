@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase"; 
+import { apiFetch } from "@/services/api";
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -38,22 +39,11 @@ function CreateInvoiceForm() {
 
   // 1. CARREGAMENTO DE DADOS
   useEffect(() => {
-    const allKeys = Object.keys(localStorage);
-    let cFound: any[] = [];
-    let pFound: any[] = [];
+    const savedClients = localStorage.getItem("facturas_clients");
+    const savedProducts = localStorage.getItem("facturas_products");
 
-    allKeys.forEach(key => {
-      try {
-        const data = JSON.parse(localStorage.getItem(key) || "[]");
-        if (Array.isArray(data) && data.length > 0) {
-          if (data[0].nif || key.includes("clients")) cFound = data;
-          if (data[0].price || data[0].preco || key.includes("prod")) pFound = data;
-        }
-      } catch (e) {}
-    });
-
-    setClients(cFound);
-    setProducts(pFound);
+    if (savedClients) setClients(JSON.parse(savedClients));
+    if (savedProducts) setProducts(JSON.parse(savedProducts));
   }, []);
 
   // 2. CÁLCULOS TOTAIS
@@ -119,43 +109,37 @@ function CreateInvoiceForm() {
     vencimentoObj.setDate(emissaoObj.getDate() + diasSomar);
     const dataVencimentoFormatada = vencimentoObj.toISOString().split('T')[0];
 
-    const invoiceId = `${docType} 2026/${Math.floor(1000 + Math.random() * 9000)}`;
-
     try {
-      // 1. Gravar Cabeçalho no Supabase
-      const { error: invError } = await supabase
-        .from('invoices')
-        .insert([{
-          id: invoiceId,
-          client_name: selectedClient.nome || selectedClient.name,
-          client_nif: selectedClient.nif || "999999999",
-          date: docData.date,
-          vencimento: dataVencimentoFormatada,
-          total: totals.total,
-          tax_amount: totals.iva,
-          type: docType,
-          status: docType === "FR" ? "Paga" : "Emitida",
-          observations: observations
-        }]);
-
-      if (invError) throw invError;
-
-      // 2. Gravar Itens no Supabase
+      // 1. Gravar Cabeçalho e Itens no Backend (Segurança AGT)
+      
       const itemsToInsert = items.map(item => ({
-        invoice_id: invoiceId,
         name: item.name,
         qty: item.qty,
         price: item.price,
         discount: item.discount
       }));
 
-      const { error: itemsError } = await supabase
-        .from('invoice_items')
-        .insert(itemsToInsert);
+      const payload = {
+        client_name: selectedClient.nome || selectedClient.name,
+        client_nif: selectedClient.nif || "999999999",
+        client_address: selectedClient.endereco || selectedClient.address || "Angola",
+        invoice_date: docData.date,
+        vencimento: dataVencimentoFormatada,
+        total_amount: totals.total,
+        tax_amount: totals.iva,
+        type: docType,
+        status: docType === "FR" ? "Paga" : "Emitida",
+        observations: observations,
+        lines: itemsToInsert
+      };
 
-      if (itemsError) throw itemsError;
+      await apiFetch('/invoices/', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
 
-      // 3. Backup LocalStorage (Mantendo sua lógica original de histórico)
+      // 2. Backup LocalStorage (Mantendo sua lógica original de histórico)
+      const invoiceId = `${docType} 2026/${Math.floor(1000 + Math.random() * 9000)}`;
       const newInvoiceLocal = {
         id: invoiceId,
         clientName: selectedClient.nome || selectedClient.name,
@@ -172,7 +156,7 @@ function CreateInvoiceForm() {
       const invoicesLocal = JSON.parse(localStorage.getItem("system_invoices") || "[]");
       localStorage.setItem("system_invoices", JSON.stringify([newInvoiceLocal, ...invoicesLocal]));
 
-      // 4. Baixa de Stock (Local e Nuvem se a tabela existir)
+      // 3. Baixa de Stock (Local e Nuvem se a tabela existir)
       const savedProducts = JSON.parse(localStorage.getItem("system_products") || "[]");
       const updatedProducts = savedProducts.map((p: any) => {
         const soldItem = items.find(it => it.name === (p.name || p.nome || p.description));
@@ -184,12 +168,12 @@ function CreateInvoiceForm() {
       localStorage.setItem("system_products", JSON.stringify(updatedProducts));
 
       setIsConfirmOpen(false);
-      alert("✓ Documento Emitido e Sincronizado com a Nuvem!");
+      alert("✓ Documento Emitido e Sincronizado com o Backend AGT!");
       router.push("/documents");
 
     } catch (error: any) {
-      console.error("Erro Supabase:", error);
-      alert("Erro ao gravar na Nuvem: " + error.message);
+      console.error("Erro na API Backend:", error);
+      alert("Erro ao emitir documento via AGT: " + error.message);
     }
   };
 

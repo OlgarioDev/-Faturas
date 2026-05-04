@@ -8,13 +8,15 @@ import {
   AlertCircle
 } from "lucide-react";
 
+import { apiFetch } from "@/services/api";
+
 interface Document {
   id: string;
   clientName: string;
   date: string;
   total: number;
-  type: "FT" | "FR" | "PP" | "NC" | "ND"; 
-  status: "Emitida" | "Rascunho" | "Paga" | "Anulada";
+  type: string; 
+  status: string;
 }
 
 export default function DocumentsPage() {
@@ -30,16 +32,20 @@ export default function DocumentsPage() {
     loadDocuments();
   }, []);
 
-  const loadDocuments = () => {
-    const saved = localStorage.getItem("system_invoices");
-    if (saved) {
-      try { 
-        const parsedDocs = JSON.parse(saved);
-        // Garantir que mostramos os novos primeiro sem mutar o original permanentemente
-        setDocuments([...parsedDocs].reverse()); 
-      } catch (e) { 
-        console.error("Erro ao ler arquivo", e); 
-      }
+  const loadDocuments = async () => {
+    try {
+      const data = await apiFetch('/invoices/');
+      const mappedDocs = data.map((inv: any) => ({
+        id: inv.invoice_no,
+        clientName: inv.client_name,
+        date: inv.invoice_date,
+        total: Number(inv.total_amount),
+        type: inv.invoice_type,
+        status: inv.status
+      }));
+      setDocuments(mappedDocs.reverse()); 
+    } catch (e) {
+      console.error("Erro ao carregar faturas da API", e);
     }
   };
 

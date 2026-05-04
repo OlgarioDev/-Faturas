@@ -38,6 +38,7 @@ class AGTComplianceService:
 
     @staticmethod
     def secure_create_invoice(invoice_data, company_id):
+        from app.models.billing import InvoiceLine
         # 1. Start Transaction
         # 2. Get Next Number
         invoice_no = AGTComplianceService.get_next_invoice_number(company_id)
@@ -48,8 +49,19 @@ class AGTComplianceService:
         
         # 4. Generate Hash
         sys_date = datetime.utcnow()
-        inv_date = invoice_data.get('invoice_date', sys_date.date())
-        total = invoice_data.get('total_amount', 0.0)
+        # Fallback to sys_date if invoice_date is not provided
+        inv_date_str = invoice_data.get('invoice_date', '')
+        if inv_date_str:
+            inv_date = datetime.strptime(inv_date_str, '%Y-%m-%d').date()
+        else:
+            inv_date = sys_date.date()
+            
+        due_date_str = invoice_data.get('vencimento', '')
+        due_date = None
+        if due_date_str:
+            due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
+            
+        total = float(invoice_data.get('total_amount', 0.0))
         
         new_hash = AGTComplianceService.generate_hash(
             invoice_date=inv_date,
@@ -63,7 +75,15 @@ class AGTComplianceService:
         new_invoice = Invoice(
             invoice_no=invoice_no,
             company_id=company_id,
+            client_name=invoice_data.get('client_name', 'Desconhecido'),
+            client_nif=invoice_data.get('client_nif', '999999999'),
+            client_address=invoice_data.get('client_address', ''),
+            status=invoice_data.get('status', 'Emitida'),
+            invoice_type=invoice_data.get('type', 'FT'),
+            due_date=due_date,
+            observations=invoice_data.get('observations', ''),
             total_amount=total,
+            tax_amount=float(invoice_data.get('tax_amount', 0.0)),
             hash_control=new_hash,
             previous_hash=previous_hash,
             system_entry_date=sys_date,
@@ -71,5 +91,18 @@ class AGTComplianceService:
         )
         
         db.session.add(new_invoice)
+        db.session.flush() # To get the new_invoice.id for the lines
+        
+        # Add Invoice Lines
+        lines_data = invoice_data.get('lines', [])
+        for line in lines_data:
+            new_line = InvoiceLine(
+                invoice_id=new_invoice.id,
+                description=line.get('name', 'Artigo sem nome'),
+                quantity=float(line.get('qty', 1)),
+                unit_price=float(line.get('price', 0.0))
+            )
+            db.session.add(new_line)
+            
         db.session.commit()
         return new_invoice

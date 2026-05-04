@@ -16,6 +16,17 @@ class Invoice(db.Model):
     invoice_no = db.Column(db.String(50), unique=True, nullable=False) # Ex: FT 2024/1
     company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
     
+    # Detalhes do Cliente
+    client_name = db.Column(db.String(255), nullable=False)
+    client_nif = db.Column(db.String(50), nullable=True)
+    client_address = db.Column(db.Text, nullable=True)
+    
+    # Metadados
+    status = db.Column(db.String(50), nullable=False, default="Emitida")
+    invoice_type = db.Column(db.String(20), nullable=False, default="FT")
+    due_date = db.Column(db.Date, nullable=True)
+    observations = db.Column(db.Text, nullable=True)
+    
     # Valores
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
     tax_amount = db.Column(db.Numeric(10, 2), default=0.0)
@@ -26,7 +37,7 @@ class Invoice(db.Model):
     system_entry_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     invoice_date = db.Column(db.Date, nullable=False)
     
-    lines = db.relationship('InvoiceLine', backref='invoice', lazy=True)
+    lines = db.relationship('InvoiceLine', backref='invoice', lazy=True, cascade="all, delete-orphan")
 
 class InvoiceLine(db.Model):
     __tablename__ = 'invoice_lines'
