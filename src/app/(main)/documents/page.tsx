@@ -8,7 +8,7 @@ import {
   AlertCircle
 } from "lucide-react";
 
-import { apiFetch } from "@/services/api";
+import { apiFetch } from "@/lib/api";
 
 interface Document {
   id: string;
@@ -19,6 +19,16 @@ interface Document {
   status: string;
 }
 
+interface APIInvoice {
+  id: string;
+  number: string;
+  client: string;
+  date: string;
+  total: number;
+  status: string;
+  type?: string; // Caso adiciones este campo na API depois
+}
+
 export default function DocumentsPage() {
   const router = useRouter();
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -26,6 +36,7 @@ export default function DocumentsPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("Todos");
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     setIsMounted(true);
@@ -34,37 +45,39 @@ export default function DocumentsPage() {
 
   const loadDocuments = async () => {
     try {
-      const data = await apiFetch('/invoices/');
-      const mappedDocs = data.map((inv: any) => ({
-        id: inv.invoice_no,
-        clientName: inv.client_name,
-        date: inv.invoice_date,
-        total: Number(inv.total_amount),
-        type: inv.invoice_type,
+      setIsLoading(true);
+      const data = await apiFetch('/api/invoices/');
+      const mappedDocs = data.map((inv: APIInvoice) => ({
+        id: inv.id,
+        reference: inv.number || "Rascunho",
+        clientName: inv.client,
+        date: new Date(inv.date).toLocaleDateString('pt-AO'),
+        total: inv.total,
+        type: inv.number?.split(' ')[0] || "FT", // Extrai FT ou FR do número
         status: inv.status
       }));
-      setDocuments(mappedDocs.reverse()); 
+      setDocuments(mappedDocs); 
     } catch (e) {
       console.error("Erro ao carregar faturas da API", e);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const formatCurrency = (val: number) =>
     val.toLocaleString("pt-AO", { style: "currency", currency: "AOA" });
 
-  // --- NOVA FUNÇÃO: REGISTAR PAGAMENTO ---
-  const handleMarkAsPaid = (docId: string) => {
-    if (confirm(`Confirmar o recebimento do pagamento para o documento ${docId}?`)) {
-      const saved = localStorage.getItem("system_invoices");
-      if (saved) {
-        const parsedDocs = JSON.parse(saved);
-        const updatedDocs = parsedDocs.map((d: Document) => 
-          d.id === docId ? { ...d, status: "Paga" } : d
-        );
-        
-        localStorage.setItem("system_invoices", JSON.stringify(updatedDocs));
-        loadDocuments(); // Recarrega a lista visualmente
-        setSelectedDocId(docId);
+  const handleMarkAsPaid = async (docId: string) => {
+    if (confirm(`Confirmar o recebimento do pagamento para este documento?`)) {
+      try {
+        await apiFetch(`/api/invoices/${docId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ status: 'Paga' })
+        });
+        await loadDocuments(); // Recarrega da BD
+        alert("Pagamento registado com sucesso!");
+      } catch (error) {
+        alert("Erro ao atualizar estado do pagamento.");
       }
     }
   };
@@ -82,11 +95,7 @@ export default function DocumentsPage() {
     }
   };
 
-  if (!isMounted) return (
-    <div className="p-10 flex items-center justify-center min-h-screen">
-       <div className="animate-pulse font-black text-slate-300 uppercase italic tracking-widest">A carregar arquivo...</div>
-    </div>
-  );
+  if (!isMounted) return null;
 
   const selectedDoc = documents.find(d => d.id === selectedDocId);
 
@@ -103,8 +112,7 @@ export default function DocumentsPage() {
           
           {selectedDoc && (
             <div className="flex flex-wrap gap-2 animate-in slide-in-from-right-4">
-              {/* BOTAO PAGAR: Só aparece se for FT (Crédito) e estiver apenas Emitida */}
-              {selectedDoc.type === "FT" && selectedDoc.status === "Emitida" && (
+              {selectedDoc.status === "Rascunho" || selectedDoc.status === "Emitida" && (
                 <button 
                   onClick={() => handleMarkAsPaid(selectedDoc.id)}
                   className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black text-[10px] hover:bg-emerald-700 flex items-center gap-2 transition-all uppercase shadow-lg shadow-emerald-200"
@@ -113,7 +121,7 @@ export default function DocumentsPage() {
                 </button>
               )}
 
-              {(selectedDoc.type === "FT" || selectedDoc.type === "FR") && selectedDoc.status !== "Anulada" && (
+              {selectedDoc.status !== "Anulada" && (
                 <button 
                   onClick={() => handleGenerateNC(selectedDoc)}
                   className="bg-red-50 border border-red-100 text-red-600 px-5 py-2.5 rounded-xl font-black text-[10px] hover:bg-red-100 flex items-center gap-2 transition-all uppercase"
@@ -123,10 +131,10 @@ export default function DocumentsPage() {
               )}
               
               <button 
-                onClick={() => router.push(`/documents/view/${encodeURIComponent(selectedDoc.id)}`)}
+                onClick={() => router.push(`/documents/view/${selectedDoc.id}`)}
                 className="bg-white border border-slate-200 text-slate-700 px-5 py-2.5 rounded-xl font-black text-[10px] shadow-sm hover:bg-slate-50 flex items-center gap-2 transition-all uppercase"
               >
-                <Printer size={14} /> Imprimir
+                <Printer size={14} /> Visualizar / Imprimir
               </button>
             </div>
           )}
@@ -138,14 +146,14 @@ export default function DocumentsPage() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               type="text" 
-              placeholder="Pesquisar por cliente ou referência..." 
+              placeholder="Pesquisar por cliente..." 
               className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-[1.5rem] outline-none focus:ring-4 focus:ring-blue-500/5 text-sm font-bold text-slate-700 transition-all shadow-sm"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
           <div className="flex bg-white p-1.5 rounded-[1.5rem] border border-slate-200 shadow-sm overflow-x-auto no-scrollbar">
-            {["Todos", "Emitida", "Paga", "Anulada"].map((status) => (
+            {["Todos", "Rascunho", "Paga", "Anulada"].map((status) => (
               <button
                 key={status}
                 onClick={() => setFilterStatus(status)}
@@ -165,7 +173,7 @@ export default function DocumentsPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">
-                  <th className="px-8 py-5">Referência / Data</th>
+                  <th className="px-8 py-5">Documento / Data</th>
                   <th className="px-6 py-5">Cliente</th>
                   <th className="px-6 py-5 text-center">Estado</th>
                   <th className="px-6 py-5 text-right">Valor Total</th>
@@ -173,7 +181,9 @@ export default function DocumentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredDocs.length > 0 ? (
+                {isLoading ? (
+                  <tr><td colSpan={5} className="py-20 text-center animate-pulse font-bold text-slate-400">Sincronizando com arquivo central...</td></tr>
+                ) : filteredDocs.length > 0 ? (
                   filteredDocs.map((doc) => (
                     <tr 
                       key={doc.id} 
@@ -189,16 +199,16 @@ export default function DocumentsPage() {
                             {doc.type}
                           </div>
                           <div>
-                            <div className="font-black text-slate-900 text-sm">{doc.id}</div>
+                            <div className="font-black text-slate-900 text-sm">{doc.id.substring(0,8)}...</div>
                             <div className="text-[9px] text-slate-400 font-bold uppercase">{doc.date}</div>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-5">
                          <div className="font-bold text-slate-700 text-xs uppercase">{doc.clientName}</div>
-                         {doc.status === 'Emitida' && doc.type === 'FT' && (
+                         {doc.status === 'Rascunho' && (
                            <div className="text-[8px] text-amber-600 font-black flex items-center gap-1 mt-1 uppercase">
-                             <AlertCircle size={10}/> Pendente de Recebimento
+                             <AlertCircle size={10}/> Aguardando Liquidação
                            </div>
                          )}
                       </td>
@@ -212,14 +222,12 @@ export default function DocumentsPage() {
                       </td>
                       <td className="px-6 py-5 text-right font-black text-slate-900 text-sm">{formatCurrency(doc.total)}</td>
                       <td className="px-8 py-5 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => router.push(`/documents/view/${encodeURIComponent(doc.id)}`)}
-                            className="p-2 text-slate-300 hover:text-blue-600 transition-all bg-slate-50 rounded-lg"
-                          >
-                            <Eye size={18} />
-                          </button>
-                        </div>
+                        <button 
+                          onClick={() => setSelectedDocId(doc.id)}
+                          className="p-2 text-slate-300 hover:text-blue-600 transition-all bg-slate-50 rounded-lg"
+                        >
+                          <Eye size={18} />
+                        </button>
                       </td>
                     </tr>
                   ))

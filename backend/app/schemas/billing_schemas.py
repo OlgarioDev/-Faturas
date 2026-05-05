@@ -1,6 +1,9 @@
 from app.extensions import ma
-from app.models.billing import Invoice, InvoiceLine, Tax
 from marshmallow import fields
+
+# Aqui está a correção: Faturas vêm do ficheiro novo, Impostos do antigo!
+from app.models.invoice import Invoice, InvoiceLine
+from app.models.billing import Tax
 
 class TaxSchema(ma.SQLAlchemyAutoSchema):
     class Meta:

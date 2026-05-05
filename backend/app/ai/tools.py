@@ -1,5 +1,5 @@
 from langchain.tools import tool
-from app.models.billing import Invoice
+from app.models.invoice import Invoice
 from sqlalchemy import func
 from app.extensions import db
 

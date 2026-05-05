@@ -8,43 +8,7 @@ class Tax(db.Model):
     tax_type = db.Column(db.String(20), nullable=False) # IVA, IS
     tax_percentage = db.Column(db.Float, nullable=False)
     exemption_reason = db.Column(db.String(255), nullable=True) # Artigo para isenção
-    
-class Invoice(db.Model):
-    __tablename__ = 'invoices'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    invoice_no = db.Column(db.String(50), unique=True, nullable=False) # Ex: FT 2024/1
-    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
-    
-    # Detalhes do Cliente
-    client_name = db.Column(db.String(255), nullable=False)
-    client_nif = db.Column(db.String(50), nullable=True)
-    client_address = db.Column(db.Text, nullable=True)
-    
-    # Metadados
-    status = db.Column(db.String(50), nullable=False, default="Emitida")
-    invoice_type = db.Column(db.String(20), nullable=False, default="FT")
-    due_date = db.Column(db.Date, nullable=True)
-    observations = db.Column(db.Text, nullable=True)
-    
-    # Valores
-    total_amount = db.Column(db.Numeric(10, 2), nullable=False)
-    tax_amount = db.Column(db.Numeric(10, 2), default=0.0)
-    
-    # AGT Compliance Fields
-    hash_control = db.Column(db.String(255), nullable=False)
-    previous_hash = db.Column(db.String(255), nullable=True)
-    system_entry_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    invoice_date = db.Column(db.Date, nullable=False)
-    
-    lines = db.relationship('InvoiceLine', backref='invoice', lazy=True, cascade="all, delete-orphan")
 
-class InvoiceLine(db.Model):
-    __tablename__ = 'invoice_lines'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    invoice_id = db.Column(db.Integer, db.ForeignKey('invoices.id'), nullable=False)
-    description = db.Column(db.String(255), nullable=False)
-    quantity = db.Column(db.Numeric(10, 2), nullable=False)
-    unit_price = db.Column(db.Numeric(10, 2), nullable=False)
-    tax_id = db.Column(db.Integer, db.ForeignKey('taxes.id'), nullable=True)
+# AVISO: As classes Invoice e InvoiceLine foram removidas daqui!
+# Elas agora vivem no seu ficheiro dedicado: app/models/invoice.py
+# Isto resolve o erro "Multiple classes found for path 'Invoice'".

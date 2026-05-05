@@ -1,62 +1,96 @@
 "use client";
 
-import { supabase } from "@/lib/supabase"; 
-import { apiFetch } from "@/services/api";
-
+import { apiFetch } from "@/lib/api"; 
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { 
-  Search, Printer, Download, Eye,
-  Plus, Trash2, Save, ArrowLeft, 
-  User, Package, Calculator, ShieldCheck, Calendar, Info, CheckCircle,
-  FileText, RotateCcw, Filter, CheckCircle2,
-  AlertCircle,
-  ShieldAlert
+  Plus, Trash2, ArrowLeft, 
+  User, ShieldCheck, Calculator, Calendar, CheckCircle,
+  AlertCircle
 } from "lucide-react";
+
+// --- INTERFACES PARA ELIMINAR O 'ANY' ---
+interface Client {
+  id: string;
+  name: string;
+  nome?: string;
+  nif: string;
+  email: string;
+  endereco?: string;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  descricao?: string;
+  unit_price: number;
+  price?: number;
+}
+
+interface InvoiceItem {
+  id: number;
+  productId: string;
+  name: string;
+  qty: number;
+  price: number;
+  discount: number;
+}
 
 function CreateInvoiceForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const docType = searchParams.get("type") || "FT";
 
-  // --- ESTADOS ---
-  const [clients, setClients] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [selectedClient, setSelectedClient] = useState<any>(null);
-  const [taxRegime, setTaxRegime] = useState("geral"); 
-  const [exemptionReason, setExemptionReason] = useState("");
-  const [observations, setObservations] = useState("");
-  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  // --- ESTADOS TIPADOS ---
+  const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [taxRegime, setTaxRegime] = useState<string>("geral"); 
+  const [exemptionReason, setExemptionReason] = useState<string>("");
+  const [observations, setObservations] = useState<string>("");
+  const [isConfirmOpen, setIsConfirmOpen] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
   const [docData, setDocData] = useState({
     date: new Date().toISOString().split('T')[0],
-    vencimento: "45 dias",
+    vencimento: "Pronto Pagamento",
   });
 
-  const [items, setItems] = useState<any[]>([
+  const [items, setItems] = useState<InvoiceItem[]>([
     { id: Date.now(), productId: "", name: "", qty: 1, price: 0, discount: 0 }
   ]);
 
   // 1. CARREGAMENTO DE DADOS
   useEffect(() => {
-    const savedClients = localStorage.getItem("facturas_clients");
-    const savedProducts = localStorage.getItem("facturas_products");
-
-    if (savedClients) setClients(JSON.parse(savedClients));
-    if (savedProducts) setProducts(JSON.parse(savedProducts));
+    const fetchData = async () => {
+      try {
+        const [clientsData, productsData] = await Promise.all([
+          apiFetch('/api/clients/'),
+          apiFetch('/api/products/')
+        ]);
+        setClients(clientsData);
+        setProducts(productsData);
+      } catch (e) {
+        console.error("Erro ao carregar dados:", e);
+      }
+    };
+    fetchData();
   }, []);
 
-  // 2. CÁLCULOS TOTAIS
+  // 2. CÁLCULOS
   const calculateTotals = () => {
     let subtotal = 0;
     let descontosVal = 0;
     const taxaIva = taxRegime === "geral" ? 0.14 : 0;
+    
     items.forEach(item => {
       const bruto = item.qty * item.price;
       const desc = bruto * (item.discount / 100);
       subtotal += bruto;
       descontosVal += desc;
     });
+    
     const base = subtotal - descontosVal;
     const iva = base * taxaIva;
     return { subtotal, descontosVal, iva, total: base + iva };
@@ -64,116 +98,78 @@ function CreateInvoiceForm() {
 
   const totals = calculateTotals();
 
-  const updateItem = (index: number, field: string, value: any) => {
+  const updateItem = (index: number, field: keyof InvoiceItem, value: string | number) => {
     const newItems = [...items];
+    
     if (field === "productId") {
-      const prod = products.find(p => 
-        (p.name || p.nome || p.description || p.descricao || p.label) === value
-      );
+      const prod = products.find(p => p.name === value || p.descricao === value);
       
       if (prod) {
         newItems[index] = { 
           ...newItems[index], 
-          productId: prod.id || value, 
-          name: prod.name || prod.nome || prod.description || prod.descricao, 
-          price: Number(prod.price || prod.preco || prod.priceUnitario || 0) 
+          productId: prod.id, 
+          name: prod.name || prod.descricao || "", 
+          price: Number(prod.unit_price || prod.price || 0) 
         };
       } else {
-        newItems[index].name = value;
+        newItems[index].name = String(value);
       }
     } else {
+      // @ts-expect-error - O TS tem dificuldade em validar tipos dinâmicos cruzados aqui
       newItems[index][field] = value;
     }
     setItems(newItems);
   };
 
   const handlePreFinalize = () => {
-    if (!selectedClient) return alert("Selecione um cliente para emitir o documento.");
-    if (items.length === 0 || items[0].name === "") return alert("Adicione pelo menos um item.");
-    if (totals.total <= 0) return alert("O valor total do documento deve ser superior a zero.");
-    if (taxRegime === "isento" && !exemptionReason) return alert("Selecione o motivo de isenção de IVA.");
+    if (!selectedClient) return alert("Selecione um cliente válido.");
+    if (items.some(it => !it.name || it.price <= 0)) return alert("Verifique os itens.");
+    if (taxRegime === "isento" && !exemptionReason) return alert("Motivo de isenção obrigatório.");
 
     setIsConfirmOpen(true);
   };
 
-  // --- FUNÇÃO FINALIZAR ATUALIZADA PARA SUPABASE ---
+  // --- FINALIZAR ---
   const handleFinalize = async () => {
+    if (!selectedClient) return;
+    setIsLoading(true);
+    
     const emissaoObj = new Date(docData.date);
     let diasSomar = 0;
+    if (docData.vencimento.includes("dias")) diasSomar = parseInt(docData.vencimento);
     
-    if (docData.vencimento.includes("dias")) {
-        diasSomar = parseInt(docData.vencimento);
-    }
-
     const vencimentoObj = new Date(emissaoObj);
     vencimentoObj.setDate(emissaoObj.getDate() + diasSomar);
-    const dataVencimentoFormatada = vencimentoObj.toISOString().split('T')[0];
 
     try {
-      // 1. Gravar Cabeçalho e Itens no Backend (Segurança AGT)
-      
-      const itemsToInsert = items.map(item => ({
-        name: item.name,
-        qty: item.qty,
-        price: item.price,
-        discount: item.discount
-      }));
-
       const payload = {
-        client_name: selectedClient.nome || selectedClient.name,
-        client_nif: selectedClient.nif || "999999999",
-        client_address: selectedClient.endereco || selectedClient.address || "Angola",
-        invoice_date: docData.date,
-        vencimento: dataVencimentoFormatada,
-        total_amount: totals.total,
-        tax_amount: totals.iva,
-        type: docType,
-        status: docType === "FR" ? "Paga" : "Emitida",
+        client_id: selectedClient.id,
+        document_type: docType === "FR" ? "Factura Recibo" : "Factura",
+        due_date: vencimentoObj.toISOString(),
         observations: observations,
-        lines: itemsToInsert
+        items: items.map(item => ({
+          product_id: item.productId || null,
+          description: item.name,
+          quantity: item.qty,
+          unit_price: item.price,
+          tax_percentage: taxRegime === "geral" ? 14 : 0
+        }))
       };
 
-      await apiFetch('/invoices/', {
+      await apiFetch('/api/invoices/', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
 
-      // 2. Backup LocalStorage (Mantendo sua lógica original de histórico)
-      const invoiceId = `${docType} 2026/${Math.floor(1000 + Math.random() * 9000)}`;
-      const newInvoiceLocal = {
-        id: invoiceId,
-        clientName: selectedClient.nome || selectedClient.name,
-        clientNif: selectedClient.nif || "999999999",
-        clientAddress: selectedClient.endereco || "Angola",
-        date: docData.date,
-        vencimento: dataVencimentoFormatada,
-        total: totals.total,
-        type: docType,
-        status: docType === "FR" ? "Paga" : "Emitida",
-        items: items, 
-        observations: observations
-      };
-      const invoicesLocal = JSON.parse(localStorage.getItem("system_invoices") || "[]");
-      localStorage.setItem("system_invoices", JSON.stringify([newInvoiceLocal, ...invoicesLocal]));
-
-      // 3. Baixa de Stock (Local e Nuvem se a tabela existir)
-      const savedProducts = JSON.parse(localStorage.getItem("system_products") || "[]");
-      const updatedProducts = savedProducts.map((p: any) => {
-        const soldItem = items.find(it => it.name === (p.name || p.nome || p.description));
-        if (soldItem) {
-          return { ...p, stock: (Number(p.stock || p.quantidade) || 0) - soldItem.qty };
-        }
-        return p;
-      });
-      localStorage.setItem("system_products", JSON.stringify(updatedProducts));
-
       setIsConfirmOpen(false);
-      alert("✓ Documento Emitido e Sincronizado com o Backend AGT!");
+      alert("✓ Documento emitido com sucesso!");
       router.push("/documents");
 
-    } catch (error: any) {
-      console.error("Erro na API Backend:", error);
-      alert("Erro ao emitir documento via AGT: " + error.message);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Erro desconhecido";
+      alert("Erro na emissão: " + msg);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -187,30 +183,32 @@ function CreateInvoiceForm() {
           </button>
           <div className="text-center">
             <h1 className="text-2xl font-black uppercase italic text-[#0f172a]">Nova {docType}</h1>
-            <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest leading-none mt-1">Software Validado AGT</p>
+            <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest leading-none mt-1">Software Validado</p>
           </div>
           <div className="w-20" />
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-8 space-y-6">
+            
             {/* CLIENTE */}
             <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
               <h2 className="text-[10px] font-black uppercase text-slate-400 mb-4 flex items-center gap-2 tracking-widest">
-                <User size={14} className="text-blue-600"/> Dados do Cliente
+                <User size={14} className="text-blue-600"/> Selecionar Cliente
               </h2>
               <input 
-                list="list-c"
-                placeholder="Procurar contacto (Nome ou NIF)..."
+                list="list-clients"
+                placeholder="Pesquisar cliente..."
                 className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none border border-slate-100"
                 onChange={(e) => {
-                  const c = clients.find(cl => (cl.nome || cl.name) === e.target.value);
+                  const val = e.target.value;
+                  const c = clients.find(cl => cl.name === val || cl.nome === val);
                   if (c) setSelectedClient(c);
                 }}
               />
-              <datalist id="list-c">
-                {clients.map((c, i) => (
-                  <option key={i} value={c.nome || c.name}>{c.nif} - {c.endereco}</option>
+              <datalist id="list-clients">
+                {clients.map((c) => (
+                  <option key={c.id} value={c.name || c.nome}>{c.nif} - {c.email}</option>
                 ))}
               </datalist>
             </section>
@@ -218,16 +216,16 @@ function CreateInvoiceForm() {
             {/* IVA */}
             <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
               <h2 className="text-[10px] font-black uppercase text-slate-400 mb-4 flex items-center gap-2 tracking-widest">
-                <ShieldCheck size={14} className="text-emerald-500"/> Configuração de Imposto
+                <ShieldCheck size={14} className="text-emerald-500"/> Imposto
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <select className="p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none border" onChange={(e) => setTaxRegime(e.target.value)} value={taxRegime}>
-                  <option value="geral">Regime Geral (IVA 14%)</option>
-                  <option value="isento">Regime de Exclusão (IVA 0%)</option>
+                  <option value="geral">Regime Geral (14%)</option>
+                  <option value="isento">Isento (0%)</option>
                 </select>
                 {taxRegime === "isento" && (
-                  <select className="p-4 bg-red-50 text-red-700 rounded-2xl font-bold text-xs outline-none border border-red-100 animate-pulse" onChange={(e) => setExemptionReason(e.target.value)}>
-                    <option value="">Motivo de Isenção obrigatório...</option>
+                  <select className="p-4 bg-red-50 text-red-700 rounded-2xl font-bold text-xs outline-none border border-red-100" onChange={(e) => setExemptionReason(e.target.value)}>
+                    <option value="">Selecione o Motivo...</option>
                     <option value="M02">Isenção Artigo 12.º</option>
                     <option value="M04">Exclusão Artigo 16.º</option>
                   </select>
@@ -238,126 +236,98 @@ function CreateInvoiceForm() {
             {/* ITENS */}
             <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
               <div className="flex justify-between items-center mb-8 font-black uppercase text-slate-400 text-[10px] tracking-widest">
-                <span>Linhas da Factura</span>
-                <button onClick={() => setItems([...items, { id: Date.now(), productId: "", name: "", qty: 1, price: 0, discount: 0 }])} className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center hover:scale-110 transition-transform"><Plus size={18}/></button>
+                <span>Itens</span>
+                <button onClick={() => setItems([...items, { id: Date.now(), productId: "", name: "", qty: 1, price: 0, discount: 0 }])} className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center hover:bg-blue-600 transition-colors"><Plus size={18}/></button>
               </div>
               <div className="space-y-4">
                 {items.map((item, index) => (
                   <div key={item.id} className="p-5 bg-slate-50/50 rounded-[2rem] border border-slate-100 grid grid-cols-12 gap-4 items-end relative group">
                     <div className="col-span-12 md:col-span-5">
-                      <label className="text-[9px] font-black text-slate-400 uppercase ml-2 mb-1 block tracking-widest italic">Descrição do Item</label>
+                      <label className="text-[9px] font-black text-slate-400 uppercase ml-2 mb-1 block">Produto/Serviço</label>
                       <input 
-                        list={`p-list-${index}`} 
-                        placeholder="Pesquisar catálogo..." 
+                        list={`prod-list-${index}`} 
+                        placeholder="Pesquisar..." 
                         className="w-full p-3 bg-white rounded-xl font-bold text-xs outline-none border" 
                         onChange={(e) => updateItem(index, "productId", e.target.value)} 
                       />
-                      <datalist id={`p-list-${index}`}>
-                        {products.map((p, i) => (
-                          <option key={i} value={p.name || p.nome || p.description || p.descricao} />
+                      <datalist id={`prod-list-${index}`}>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.name || p.descricao} />
                         ))}
                       </datalist>
                     </div>
                     <div className="col-span-4 md:col-span-3">
-                      <label className="text-[9px] font-black text-slate-400 uppercase ml-2 mb-1 block tracking-widest">Preço Unit.</label>
-                      <input type="number" value={item.price} onChange={(e) => updateItem(index, "price", Number(e.target.value))} className="w-full p-3 rounded-xl text-xs font-bold text-right outline-none bg-white shadow-sm" />
+                      <label className="text-[9px] font-black text-slate-400 uppercase ml-2 mb-1 block">Preço Unit.</label>
+                      <input type="number" value={item.price} onChange={(e) => updateItem(index, "price", Number(e.target.value))} className="w-full p-3 rounded-xl text-xs font-bold text-right outline-none bg-white border" />
                     </div>
-                    <div className="col-span-3 md:col-span-2">
-                      <label className="text-[9px] font-black text-slate-400 uppercase ml-2 mb-1 block tracking-widest">Qtd.</label>
-                      <input type="number" value={item.qty} onChange={(e) => updateItem(index, "qty", Number(e.target.value))} className="w-full p-3 rounded-xl text-xs font-bold text-center outline-none bg-white shadow-sm" />
+                    <div className="col-span-4 md:col-span-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase ml-2 mb-1 block">Qtd.</label>
+                      <input type="number" value={item.qty} onChange={(e) => updateItem(index, "qty", Number(e.target.value))} className="w-full p-3 rounded-xl text-xs font-bold text-center outline-none bg-white border" />
                     </div>
-                     <div className="col-span-3 md:col-span-2">
-                        <label className="text-[9px] font-black uppercase text-blue-500 ml-1 mb-1 block italic tracking-widest">Desc %</label>
+                    <div className="col-span-4 md:col-span-2">
+                        <label className="text-[9px] font-black uppercase text-blue-500 ml-1 mb-1 block">Desc %</label>
                         <input type="number" value={item.discount} onChange={(e) => updateItem(index, "discount", Number(e.target.value))} className="w-full p-3 rounded-xl text-xs font-bold text-center outline-none bg-blue-50 text-blue-600 border border-blue-100" />
-                      </div>
-                    <button onClick={() => setItems(items.filter(it => it.id !== item.id))} className="absolute top-4 right-4 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={18}/></button>
+                    </div>
+                    <button onClick={() => setItems(items.filter(it => it.id !== item.id))} className="absolute top-4 right-4 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
                   </div>
                 ))}
               </div>
             </section>
 
-            {/* DATA E VENCIMENTO */}
-            <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6 font-bold">
+            {/* DATAS */}
+            <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-[9px] font-black uppercase text-slate-400 mb-2 block tracking-widest italic">Data de Emissão</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-4 top-3 text-slate-300" size={16}/>
-                    <input type="date" value={docData.date} onChange={(e) => setDocData({...docData, date: e.target.value})} className="w-full p-3 pl-12 bg-slate-50 rounded-xl text-xs border outline-none font-bold" />
-                  </div>
+                  <label className="text-[9px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Data</label>
+                  <input type="date" value={docData.date} onChange={(e) => setDocData({...docData, date: e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl text-xs border outline-none font-bold" />
                 </div>
                 <div>
-                   <label className="text-[9px] font-black uppercase text-slate-400 mb-2 block tracking-widest italic">Vencimento</label>
+                   <label className="text-[9px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Pagamento</label>
                    <select className="w-full p-3 bg-slate-50 rounded-xl text-xs border font-bold" value={docData.vencimento} onChange={(e) => setDocData({...docData, vencimento: e.target.value})}>
                      <option value="Pronto Pagamento">Pronto Pagamento</option>
                      <option value="15 dias">15 dias</option>
                      <option value="30 dias">30 dias</option>
-                     <option value="45 dias">45 dias</option>
-                     <option value="90 dias">90 dias</option>
                    </select>
-                </div>
-                <div className="md:col-span-2">
-                   <label className="text-[9px] font-black uppercase text-slate-400 mb-2 block tracking-widest italic">Observações</label>
-                   <textarea className="w-full p-3 bg-slate-50 rounded-xl text-xs outline-none border h-20 font-medium" placeholder="Ex: Pagamento por transferência..." value={observations} onChange={(e) => setObservations(e.target.value)} />
                 </div>
             </section>
           </div>
 
+          {/* RESUMO */}
           <div className="lg:col-span-4">
             <div className="sticky top-10 space-y-6">
-              <section className="bg-[#0f172a] p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden border-b-8 border-blue-600">
-                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-8 flex items-center gap-2"><Calculator size={14}/> Resumo</h3>
+              <section className="bg-[#0f172a] p-8 rounded-[2.5rem] text-white shadow-2xl border-b-8 border-blue-600">
+                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-8 flex items-center gap-2"><Calculator size={14}/> Totais</h3>
                 <div className="space-y-4">
                   <div className="flex justify-between text-sm font-bold opacity-50"><span>Subtotal</span><span>{totals.subtotal.toLocaleString()} Kz</span></div>
                   <div className="flex justify-between text-sm font-bold text-red-400"><span>Descontos</span><span>-{totals.descontosVal.toLocaleString()} Kz</span></div>
-                  <div className="flex justify-between text-sm font-bold text-blue-400"><span>IVA ({taxRegime === 'geral' ? '14%' : '0%'})</span><span>+{totals.iva.toLocaleString()} Kz</span></div>
-                  <div className="pt-6 border-t border-slate-800 mt-6 italic font-black">
-                    <p className="text-[10px] text-slate-500 uppercase mb-1">Total a Pagar</p>
-                    <p className="text-4xl tracking-tighter">{totals.total.toLocaleString()} <span className="text-xs font-normal opacity-50 not-italic uppercase">Kz</span></p>
+                  <div className="flex justify-between text-sm font-bold text-blue-400"><span>IVA</span><span>+{totals.iva.toLocaleString()} Kz</span></div>
+                  <div className="pt-6 border-t border-slate-800 mt-6 font-black">
+                    <p className="text-[10px] text-slate-500 uppercase mb-1">Total</p>
+                    <p className="text-4xl tracking-tighter">{totals.total.toLocaleString()} <span className="text-xs font-normal opacity-50 uppercase">Kz</span></p>
                   </div>
                 </div>
               </section>
-              <button onClick={handlePreFinalize} className="w-full bg-[#0f172a] hover:bg-slate-800 text-white font-black py-6 rounded-[2rem] shadow-2xl flex items-center justify-center gap-4 border-2 border-slate-700 uppercase text-xs tracking-widest transition-all active:scale-95">
-                <CheckCircle size={20}/> Emitir Factura
+              <button onClick={handlePreFinalize} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-6 rounded-[2rem] shadow-2xl flex items-center justify-center gap-4 uppercase text-xs tracking-widest transition-all">
+                <CheckCircle size={20}/> Emitir Documento
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* MODAL DE CONFIRMAÇÃO AGT */}
+      {/* MODAL */}
       {isConfirmOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4">
           <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-10 text-center">
-              <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                <ShieldCheck size={40} />
-              </div>
-              <h3 className="text-2xl font-black text-slate-900 uppercase italic">Confirmar Emissão?</h3>
-              <p className="text-slate-500 mt-4 font-medium leading-relaxed text-sm">
-                O documento para <span className="font-bold text-slate-900">{selectedClient?.nome || selectedClient?.name}</span> no valor de <span className="font-bold text-blue-600">{totals.total.toLocaleString()} Kz</span> será selado.
+              <h3 className="text-2xl font-black text-slate-900 uppercase italic">Confirmar?</h3>
+              <p className="text-slate-500 mt-4 font-medium text-sm">
+                Documento para <span className="font-bold text-slate-900">{selectedClient?.name || selectedClient?.nome}</span> será emitido.
               </p>
-              
-              <div className="bg-amber-50 p-4 rounded-2xl mt-6 border border-amber-100 text-left flex gap-3">
-                 <AlertCircle className="text-amber-600 shrink-0" size={18} />
-                 <p className="text-[11px] text-amber-700 leading-tight font-medium">
-                   <span className="font-black uppercase block mb-1">Aviso da AGT</span>
-                   Após a emissão, o documento não poderá ser editado. Erros exigem uma Nota de Crédito para anulação.
-                 </p>
-              </div>
             </div>
-
             <div className="p-8 bg-slate-50 flex gap-3">
-              <button 
-                onClick={() => setIsConfirmOpen(false)}
-                className="flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all"
-              >
-                Voltar e Corrigir
-              </button>
-              <button 
-                onClick={handleFinalize}
-                className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all"
-              >
-                Confirmar e Emitir
+              <button onClick={() => setIsConfirmOpen(false)} className="flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-400">Voltar</button>
+              <button onClick={handleFinalize} disabled={isLoading} className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700">
+                {isLoading ? "Emitindo..." : "Confirmar"}
               </button>
             </div>
           </div>
@@ -369,7 +339,7 @@ function CreateInvoiceForm() {
 
 export default function Page() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<div className="p-20 text-center uppercase font-black text-slate-300">Carregando...</div>}>
       <CreateInvoiceForm />
     </Suspense>
   );

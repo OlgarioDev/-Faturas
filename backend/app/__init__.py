@@ -22,6 +22,8 @@ def create_app(config_name="dev"):
     from .routes.clients import clients_bp   # <-- ADICIONADO
     from .routes.products import products_bp # <-- ADICIONADO
     
+
+    
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(invoices_bp, url_prefix='/api/invoices')
     app.register_blueprint(insights_bp, url_prefix='/api/insights')
@@ -29,6 +31,7 @@ def create_app(config_name="dev"):
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
     app.register_blueprint(clients_bp, url_prefix='/api/clients')    # <-- ADICIONADO
     app.register_blueprint(products_bp, url_prefix='/api/products')  # <-- ADICIONADO
+    
 
     @app.route('/')
     def index():

@@ -1,6 +1,6 @@
 from app.extensions import db
 from app.models.core import User, SubscriptionStatus, Company
-from app.models.billing import Invoice
+from app.models.invoice import Invoice
 
 class AdminService:
     @staticmethod

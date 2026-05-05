@@ -1,7 +1,7 @@
 from app import create_app
 from app.extensions import db
 from app.models.core import User, Company
-from app.models.billing import Invoice
+from app.models.invoice import Invoice
 
 app = create_app('dev')
 

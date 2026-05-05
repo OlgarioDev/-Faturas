@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from app.models.billing import Invoice
+from app.models.invoice import Invoice
 from app.models.core import Company
 
 class SAFTExporter:

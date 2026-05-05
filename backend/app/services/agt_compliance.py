@@ -1,7 +1,7 @@
 import hashlib
 from datetime import datetime
 from app.extensions import db
-from app.models.billing import Invoice
+from app.models.invoice import Invoice
 from flask import current_app
 
 class AGTComplianceService:
@@ -38,7 +38,7 @@ class AGTComplianceService:
 
     @staticmethod
     def secure_create_invoice(invoice_data, company_id):
-        from app.models.billing import InvoiceLine
+        from app.models.invoice import Invoice
         # 1. Start Transaction
         # 2. Get Next Number
         invoice_no = AGTComplianceService.get_next_invoice_number(company_id)
