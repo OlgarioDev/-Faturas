@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    container_name: facturas_db
+    restart: always
+    environment:
+      POSTGRES_USER: user_admin
+      POSTGRES_PASSWORD: password_segura
+      POSTGRES_DB: facturas_v1
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: facturas_backend
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://user_admin:password_segura@db:5432/facturas_v1
+      FLASK_ENV: development
+      JWT_SECRET_KEY: super-secret-key-123
+    depends_on:
+      - db
+
+  frontend:
+    build: .  # <--- ALTERADO: Agora aponta para a raiz onde está o seu package.json
+    container_name: facturas_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:5000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

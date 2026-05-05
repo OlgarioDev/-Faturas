@@ -6,18 +6,18 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { 
   Plus, Trash2, ArrowLeft, 
-  User, ShieldCheck, Calculator, Calendar, CheckCircle,
-  AlertCircle
+  User, ShieldCheck, Calculator, CheckCircle,
+  MapPin
 } from "lucide-react";
 
-// --- INTERFACES PARA ELIMINAR O 'ANY' ---
+// --- INTERFACES ---
 interface Client {
   id: string;
   name: string;
   nome?: string;
   nif: string;
   email: string;
-  endereco?: string;
+  endereco?: string; // Morada do cliente
 }
 
 interface Product {
@@ -42,7 +42,6 @@ function CreateInvoiceForm() {
   const searchParams = useSearchParams();
   const docType = searchParams.get("type") || "FT";
 
-  // --- ESTADOS TIPADOS ---
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -61,7 +60,6 @@ function CreateInvoiceForm() {
     { id: Date.now(), productId: "", name: "", qty: 1, price: 0, discount: 0 }
   ]);
 
-  // 1. CARREGAMENTO DE DADOS
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -78,7 +76,6 @@ function CreateInvoiceForm() {
     fetchData();
   }, []);
 
-  // 2. CÁLCULOS
   const calculateTotals = () => {
     let subtotal = 0;
     let descontosVal = 0;
@@ -100,10 +97,8 @@ function CreateInvoiceForm() {
 
   const updateItem = (index: number, field: keyof InvoiceItem, value: string | number) => {
     const newItems = [...items];
-    
     if (field === "productId") {
       const prod = products.find(p => p.name === value || p.descricao === value);
-      
       if (prod) {
         newItems[index] = { 
           ...newItems[index], 
@@ -115,7 +110,7 @@ function CreateInvoiceForm() {
         newItems[index].name = String(value);
       }
     } else {
-      // @ts-expect-error - O TS tem dificuldade em validar tipos dinâmicos cruzados aqui
+      // @ts-expect-error - TS dynamic fields
       newItems[index][field] = value;
     }
     setItems(newItems);
@@ -125,11 +120,9 @@ function CreateInvoiceForm() {
     if (!selectedClient) return alert("Selecione um cliente válido.");
     if (items.some(it => !it.name || it.price <= 0)) return alert("Verifique os itens.");
     if (taxRegime === "isento" && !exemptionReason) return alert("Motivo de isenção obrigatório.");
-
     setIsConfirmOpen(true);
   };
 
-  // --- FINALIZAR ---
   const handleFinalize = async () => {
     if (!selectedClient) return;
     setIsLoading(true);
@@ -164,7 +157,6 @@ function CreateInvoiceForm() {
       setIsConfirmOpen(false);
       alert("✓ Documento emitido com sucesso!");
       router.push("/documents");
-
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Erro desconhecido";
       alert("Erro na emissão: " + msg);
@@ -189,6 +181,7 @@ function CreateInvoiceForm() {
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* COLUNA FORMULÁRIO */}
           <div className="lg:col-span-8 space-y-6">
             
             {/* CLIENTE */}
@@ -211,6 +204,17 @@ function CreateInvoiceForm() {
                   <option key={c.id} value={c.name || c.nome}>{c.nif} - {c.email}</option>
                 ))}
               </datalist>
+
+              {/* EXIBIÇÃO DA MORADA DO CLIENTE SELECIONADO */}
+              {selectedClient && (
+                <div className="mt-4 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-start gap-3 animate-in fade-in zoom-in duration-300">
+                  <MapPin size={16} className="text-blue-500 mt-1 shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-blue-400 tracking-wider">Morada de Faturação (AGT)</p>
+                    <p className="text-xs font-bold text-blue-700 italic">{selectedClient.endereco || "Sem morada registada"}</p>
+                  </div>
+                </div>
+              )}
             </section>
 
             {/* IVA */}
@@ -277,21 +281,41 @@ function CreateInvoiceForm() {
             {/* DATAS */}
             <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-[9px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Data</label>
-                  <input type="date" value={docData.date} onChange={(e) => setDocData({...docData, date: e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl text-xs border outline-none font-bold" />
+                  <label className="text-[9px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Data de Emissão</label>
+                  <input 
+                    type="date" 
+                    value={docData.date} 
+                    onChange={(e) => setDocData({...docData, date: e.target.value})} 
+                    className="w-full p-3 bg-slate-50 rounded-xl text-xs border outline-none font-bold" 
+                  />
                 </div>
                 <div>
-                   <label className="text-[9px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Pagamento</label>
-                   <select className="w-full p-3 bg-slate-50 rounded-xl text-xs border font-bold" value={docData.vencimento} onChange={(e) => setDocData({...docData, vencimento: e.target.value})}>
-                     <option value="Pronto Pagamento">Pronto Pagamento</option>
+                   <label className="text-[9px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Condições de Pagamento</label>
+                   <select 
+                     className="w-full p-3 bg-slate-50 rounded-xl text-xs border font-bold" 
+                     value={docData.vencimento} 
+                     onChange={(e) => setDocData({...docData, vencimento: e.target.value})}
+                   >
+                     <option value="Pronto Pagamento">Pronto Pagamento (Mesmo dia)</option>
                      <option value="15 dias">15 dias</option>
                      <option value="30 dias">30 dias</option>
+                     <option value="45 dias">45 dias</option>
+                     <option value="60 dias">60 dias</option>
+                     <option value="90 dias">90 dias</option>
                    </select>
+                </div>
+                <div className="md:col-span-2">
+                   <label className="text-[9px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Observações</label>
+                   <textarea 
+                     className="w-full p-3 bg-slate-50 rounded-xl text-xs outline-none border h-20 font-medium" 
+                     value={observations} 
+                     onChange={(e) => setObservations(e.target.value)} 
+                   />
                 </div>
             </section>
           </div>
 
-          {/* RESUMO */}
+          {/* COLUNA RESUMO (LADO DIREITO) */}
           <div className="lg:col-span-4">
             <div className="sticky top-10 space-y-6">
               <section className="bg-[#0f172a] p-8 rounded-[2.5rem] text-white shadow-2xl border-b-8 border-blue-600">
@@ -314,7 +338,7 @@ function CreateInvoiceForm() {
         </div>
       </div>
 
-      {/* MODAL */}
+      {/* MODAL CONFIRMAÇÃO */}
       {isConfirmOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4">
           <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">

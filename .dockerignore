@@ -1,0 +1,16 @@
+# Pastas de dependências (o Docker vai instalar as dele)
+node_modules
+.next
+backend/venv
+__pycache__
+
+# Ficheiros de log e git
+.git
+.gitignore
+npm-debug.log
+docker-compose.yml
+Dockerfile
+
+# Pastas de build do sistema
+dist
+build

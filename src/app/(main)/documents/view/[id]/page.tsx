@@ -6,7 +6,7 @@ import { ArrowLeft, Printer } from "lucide-react";
 import QRCode from "qrcode";
 import { apiFetch } from "@/lib/api";
 
-// --- INTERFACES PARA ELIMINAR O 'ANY' ---
+// --- INTERFACES ---
 
 interface InvoiceLine {
   description: string;
@@ -21,6 +21,7 @@ interface APIDocument {
   document_type: string;
   client: string;
   client_nif: string | null;
+  client_address?: string; // Morada vinda da ficha do cliente
   date: string;
   due_date: string | null;
   total_net: number;
@@ -53,7 +54,6 @@ function InvoiceViewContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
-  // Estados Tipados
   const [invoice, setInvoice] = useState<APIDocument | null>(null);
   const [company, setCompany] = useState<CompanyConfig | null>(null);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
@@ -62,7 +62,7 @@ function InvoiceViewContent() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const docId = params.id;
+        const docId = params.id as string;
         const data: APIDocument = await apiFetch(`/api/invoices/${docId}`);
 
         if (!data) {
@@ -72,24 +72,24 @@ function InvoiceViewContent() {
 
         setInvoice(data);
 
-        // Configurações da Empresa
+        // Configurações da Empresa (LocalStorage)
         const savedSettings = localStorage.getItem('empresa_config');
         const settings: CompanyConfig | null = savedSettings ? JSON.parse(savedSettings) : null;
         setCompany(settings);
 
         if (settings && data) {
-          // Dados para o QR Code (Padrão AGT simplificado para o exemplo)
+          // Dados para o QR Code (Padrão AGT)
           const qrData = `${settings.nif};${data.document_type};${data.client_nif || '999999999'};${data.date};${data.total_gross}`;
           QRCode.toDataURL(qrData, { margin: 1, width: 80 }, (err, url) => {
             if (!err) setQrCodeUrl(url);
           });
         }
       } catch (e: unknown) {
-        setError("Erro ao carregar dados do servidor. Verifique se o ID é válido.");
+        setError("Erro ao carregar dados do servidor. Verifique a ligação.");
       }
     };
 
-    fetchData();
+    if (params.id) fetchData();
 
     if (searchParams.get("print") === "true") {
       setTimeout(() => window.print(), 1500);
@@ -102,11 +102,18 @@ function InvoiceViewContent() {
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-8 print:p-0 print:bg-white font-sans text-black">
       
+      {/* BARRA DE AÇÕES - OCULTA NA IMPRESSÃO */}
       <div className="max-w-4xl mx-auto mb-6 flex justify-between items-center print:hidden">
-        <button onClick={() => router.back()} className="flex items-center gap-2 text-[10px] font-bold text-slate-400 hover:text-black uppercase tracking-widest transition-all">
+        <button 
+          onClick={() => router.back()} 
+          className="flex items-center gap-2 text-[10px] font-bold text-slate-400 hover:text-black uppercase tracking-widest transition-all"
+        >
           <ArrowLeft size={14} /> Voltar ao Arquivo
         </button>
-        <button onClick={() => window.print()} className="bg-white border-2 border-slate-900 text-slate-900 px-6 py-2 rounded font-bold text-[10px] hover:bg-slate-900 hover:text-white transition-all flex items-center gap-2 uppercase tracking-widest shadow-sm">
+        <button 
+          onClick={() => window.print()} 
+          className="bg-white border-2 border-slate-900 text-slate-900 px-6 py-2 rounded font-bold text-[10px] hover:bg-slate-900 hover:text-white transition-all flex items-center gap-2 uppercase tracking-widest shadow-sm"
+        >
           <Printer size={16} /> Imprimir Documento
         </button>
       </div>
@@ -115,6 +122,8 @@ function InvoiceViewContent() {
         
         {/* CABEÇALHO */}
         <div className="flex justify-between items-start mb-12 border-b pb-8 border-slate-100">
+          
+          {/* LADO ESQUERDO: Dados da sua Empresa */}
           <div className="space-y-4">
              {company?.logo ? (
                <img src={company.logo} alt="Logo" className="h-16 w-auto object-contain mb-2 print:grayscale" />
@@ -122,21 +131,31 @@ function InvoiceViewContent() {
                <div className="text-2xl font-black italic border-b-2 border-black inline-block mb-2">LOGO</div>
              )}
              <div className="text-[10px] leading-tight space-y-0.5 uppercase">
-               <h2 className="text-sm font-bold mb-1">{company?.nomeEmpresa || "Empresa Demo Lda"}</h2>
-               <p>{company?.endereco || "Rua Principal, Luanda"}</p>
+               <h2 className="text-sm font-bold mb-1">{company?.nomeEmpresa || "A SUA EMPRESA"}</h2>
+               <p>{company?.endereco || "Endereço da Sede"}</p>
                <p>ANGOLA</p>
-               <p>TEL: {company?.telefone || "(244) 9XX XXX XXX"}</p>
-               <p className="font-bold border-t border-dotted border-slate-300 pt-1 mt-2">NIF: {company?.nif || "5401XXXXXX"}</p>
+               <p>TEL: {company?.telefone || "--- --- ---"}</p>
+               <p className="font-bold border-t border-dotted border-slate-300 pt-1 mt-2">NIF: {company?.nif || "000000000"}</p>
              </div>
           </div>
 
+          {/* LADO DIREITO: QR Code e Dados do Cliente */}
           <div className="flex flex-col items-end text-right">
-              {qrCodeUrl && <img src={qrCodeUrl} alt="QR" className="w-20 h-20 mb-4 border p-1 border-slate-100" />}
+              {/* QR CODE SEMPRE NO TOPO */}
+              {qrCodeUrl && (
+                <div className="mb-4">
+                  <img src={qrCodeUrl} alt="QR Code AGT" className="w-20 h-20 border p-1 border-slate-100" />
+                </div>
+              )}
+              
               <div className="space-y-1">
                 <p className="text-[9px] font-bold text-slate-400 uppercase">Destinatário</p>
                 <h3 className="text-sm font-bold uppercase">{invoice.client}</h3>
-                <div className="text-[10px] text-slate-600 font-medium space-y-0.5">
-                   <p className="font-bold text-black mt-1">NIF: {invoice.client_nif || "999999999"}</p>
+                
+                <div className="text-[10px] text-slate-600 font-medium space-y-0.5 mt-1 max-w-[250px]">
+                   {/* MORADA VINDA DA FICHA DO CLIENTE */}
+                   <p className="uppercase leading-tight">{invoice.client_address || "Morada não especificada"}</p>
+                   <p className="font-bold text-black pt-1 italic">NIF: {invoice.client_nif || "999999999"}</p>
                 </div>
               </div>
           </div>
@@ -148,11 +167,13 @@ function InvoiceViewContent() {
               <h1 className="text-xl font-bold uppercase tracking-tight">
                 {invoice.document_type} N.º {invoice.number || invoice.id.substring(0,8)}
               </h1>
-              <p className="text-[9px] font-bold text-slate-400 italic">Original</p>
+              <p className="text-[9px] font-bold text-slate-400 italic">
+                {invoice.status === 'Anulada' ? 'DOCUMENTO ANULADO' : 'Original'}
+              </p>
            </div>
            <div className="text-[10px] font-bold text-slate-500 uppercase flex gap-6 border-l pl-6 border-slate-100">
-              <p>DATA: <span className="text-black">{new Date(invoice.date).toLocaleDateString('pt-AO')}</span></p>
-              <p>VENC.: <span className="text-black">{invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('pt-AO') : 'Pronto Pagamento'}</span></p>
+              <p>DATA EMISSÃO: <span className="text-black">{new Date(invoice.date).toLocaleDateString('pt-AO')}</span></p>
+              <p>VENCIMENTO: <span className="text-black">{invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('pt-AO') : 'Pronto Pagamento'}</span></p>
            </div>
         </div>
 
@@ -182,21 +203,27 @@ function InvoiceViewContent() {
           </table>
         </div>
 
-        {/* TOTAIS */}
+        {/* TOTAIS E OBSERVAÇÕES */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 text-[10px] mb-12">
            <div className="space-y-4 pt-2">
               <div>
                 <p className="font-bold border-b mb-1 uppercase text-slate-400 text-[8px]">Observações</p>
-                <p className="italic text-slate-600 uppercase leading-relaxed">{invoice.observations || "Mercadoria entregue em perfeitas condições."}</p>
+                <p className="italic text-slate-600 uppercase leading-relaxed">
+                  {invoice.observations || "Mercadoria entregue em perfeitas condições."}
+                </p>
               </div>
               <div className="bg-slate-50 p-3 rounded-lg print:p-0 print:bg-white">
                 <p className="font-bold border-b mb-2 uppercase text-slate-400 text-[8px]">Coordenadas Bancárias</p>
-                {company?.bancos?.map((b, idx) => (
-                  <div key={idx} className="mb-2 last:mb-0">
-                    <p className="font-mono text-[9px] leading-tight">BANCO: {b.banco}</p>
-                    <p className="font-mono text-[9px] leading-tight">IBAN: {b.iban}</p>
-                  </div>
-                )) || <p className="font-mono text-[9px]">IBAN: AO06.0001.XXXX.XXXX.XXXX.X</p>}
+                {company?.bancos && company.bancos.length > 0 ? (
+                  company.bancos.map((b, idx) => (
+                    <div key={idx} className="mb-2 last:mb-0">
+                      <p className="font-mono text-[9px] leading-tight">BANCO: {b.banco}</p>
+                      <p className="font-mono text-[9px] leading-tight">IBAN: {b.iban}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="font-mono text-[9px]">IBAN: AO06.0001.XXXX.XXXX.XXXX.X</p>
+                )}
               </div>
            </div>
 

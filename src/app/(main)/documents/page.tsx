@@ -26,7 +26,7 @@ interface APIInvoice {
   date: string;
   total: number;
   status: string;
-  type?: string; // Caso adiciones este campo na API depois
+  type?: string; 
 }
 
 export default function DocumentsPage() {
@@ -53,7 +53,7 @@ export default function DocumentsPage() {
         clientName: inv.client,
         date: new Date(inv.date).toLocaleDateString('pt-AO'),
         total: inv.total,
-        type: inv.number?.split(' ')[0] || "FT", // Extrai FT ou FR do número
+        type: inv.number?.split(' ')[0] || "FT", 
         status: inv.status
       }));
       setDocuments(mappedDocs); 
@@ -74,7 +74,7 @@ export default function DocumentsPage() {
           method: 'PUT',
           body: JSON.stringify({ status: 'Paga' })
         });
-        await loadDocuments(); // Recarrega da BD
+        await loadDocuments(); 
         alert("Pagamento registado com sucesso!");
       } catch (error) {
         alert("Erro ao atualizar estado do pagamento.");
@@ -112,7 +112,7 @@ export default function DocumentsPage() {
           
           {selectedDoc && (
             <div className="flex flex-wrap gap-2 animate-in slide-in-from-right-4">
-              {selectedDoc.status === "Rascunho" || selectedDoc.status === "Emitida" && (
+              {(selectedDoc.status === "Rascunho" || selectedDoc.status === "Emitida") && (
                 <button 
                   onClick={() => handleMarkAsPaid(selectedDoc.id)}
                   className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black text-[10px] hover:bg-emerald-700 flex items-center gap-2 transition-all uppercase shadow-lg shadow-emerald-200"
@@ -222,9 +222,14 @@ export default function DocumentsPage() {
                       </td>
                       <td className="px-6 py-5 text-right font-black text-slate-900 text-sm">{formatCurrency(doc.total)}</td>
                       <td className="px-8 py-5 text-right">
+                        {/* BOTÃO DO OLHO CORRIGIDO AQUI */}
                         <button 
-                          onClick={() => setSelectedDocId(doc.id)}
-                          className="p-2 text-slate-300 hover:text-blue-600 transition-all bg-slate-50 rounded-lg"
+                          onClick={(e) => {
+                            e.stopPropagation(); // Evita conflito com o clique da linha
+                            router.push(`/documents/view/${doc.id}`);
+                          }}
+                          className="p-2 text-slate-300 hover:text-blue-600 transition-all bg-slate-50 rounded-lg group-hover:bg-blue-50"
+                          title="Visualizar Documento"
                         >
                           <Eye size={18} />
                         </button>
