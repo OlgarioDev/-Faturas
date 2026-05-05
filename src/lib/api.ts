@@ -1,5 +1,5 @@
 // src/lib/api.ts
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.5:5000";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers);
