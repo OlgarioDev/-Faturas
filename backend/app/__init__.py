@@ -19,8 +19,8 @@ def create_app(config_name="dev"):
     from .routes.insights import insights_bp
     from .routes.auth import auth_bp
     from .routes.settings import settings_bp
-    from .routes.clients import clients_bp   # <-- ADICIONADO
-    from .routes.products import products_bp # <-- ADICIONADO
+    from .routes.clients import clients_bp   
+    from .routes.products import products_bp 
     
 
     
@@ -29,8 +29,8 @@ def create_app(config_name="dev"):
     app.register_blueprint(insights_bp, url_prefix='/api/insights')
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
-    app.register_blueprint(clients_bp, url_prefix='/api/clients')    # <-- ADICIONADO
-    app.register_blueprint(products_bp, url_prefix='/api/products')  # <-- ADICIONADO
+    app.register_blueprint(clients_bp, url_prefix='/api/clients')    
+    app.register_blueprint(products_bp, url_prefix='/api/products')  
     
 
     @app.route('/')

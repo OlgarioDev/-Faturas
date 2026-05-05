@@ -1,3 +1,4 @@
+# backend/app/config.py
 import os
 from dotenv import load_dotenv
 
@@ -15,12 +16,12 @@ class Config:
     if not _db_url:
         _db_url = "postgresql+psycopg://postgres:postgres@localhost:5432/postgres"
     
-    # CORREÇÃO CRUCIAL PARA PYTHON 3.14:
-    # Se a URL começar com postgres:// (padrão do Supabase/Heroku), 
+    # CORREÇÃO CRUCIAL PARA DRIVERS MODERNOS:
+    # Se a URL começar com postgres:// ou postgresql://, 
     # alteramos para postgresql+psycopg:// para usar o driver que instalámos.
     if _db_url.startswith("postgres://"):
         _db_url = _db_url.replace("postgres://", "postgresql+psycopg://", 1)
-    elif _db_url.startswith("postgresql://"):
+    elif _db_url.startswith("postgresql://") and "+psycopg" not in _db_url:
         _db_url = _db_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
     SQLALCHEMY_DATABASE_URI = _db_url
@@ -49,9 +50,12 @@ class TestingConfig(Config):
 class ProductionConfig(Config):
     DEBUG = False
 
-# Dicionário para mapear o ambiente
-config_by_name = dict(
-    dev=DevelopmentConfig,
-    test=TestingConfig,
-    prod=ProductionConfig
-)
+# CORREÇÃO: Dicionário mapeando os nomes curtos e longos (Docker usa nomes longos por padrão)
+config_by_name = {
+    "dev": DevelopmentConfig,
+    "development": DevelopmentConfig, # Chave adicionada para resolver o KeyError
+    "test": TestingConfig,
+    "testing": TestingConfig,
+    "prod": ProductionConfig,
+    "production": ProductionConfig    # Chave adicionada por segurança
+}

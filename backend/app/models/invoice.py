@@ -14,7 +14,6 @@ class Invoice(db.Model):
     
     # RELAÇÃO COM O CLIENTE
     client_id = db.Column(db.String(36), db.ForeignKey('clients.id'), nullable=False)
-    # LINHA CORRIGIDA: Permite aceder a i.client.name na listagem
     client = db.relationship('Client', backref='invoices')
     
     # Dados do Documento
@@ -30,6 +29,9 @@ class Invoice(db.Model):
     total_tax = db.Column(db.Float, nullable=False, default=0.0) 
     total_gross = db.Column(db.Float, nullable=False, default=0.0) 
     
+    # CORREÇÃO: Campo adicionado ao cabeçalho da fatura
+    observations = db.Column(db.Text, nullable=True)
+
     # Relacionamentos
     lines = db.relationship('InvoiceLine', backref='invoice', lazy=True, cascade="all, delete-orphan")
 
@@ -42,7 +44,7 @@ class InvoiceLine(db.Model):
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     
     invoice_id = db.Column(db.String(36), db.ForeignKey('invoices.id'), nullable=False)
-    product_id = db.Column(db.String(36), db.ForeignKey('products.id'), nullable=False)
+    product_id = db.Column(db.String(36), db.ForeignKey('products.id'), nullable=True) # Alterado para nullable se houver descrições manuais
     
     description = db.Column(db.String(255), nullable=False)
     quantity = db.Column(db.Float, nullable=False, default=1.0)
@@ -51,5 +53,8 @@ class InvoiceLine(db.Model):
     
     line_total_net = db.Column(db.Float, nullable=False)
     line_total_tax = db.Column(db.Float, nullable=False)
+
+    # Nota: Mantive aqui também caso queiras observações por cada item específico
+    observations = db.Column(db.Text, nullable=True)
     
     product = db.relationship('Product')

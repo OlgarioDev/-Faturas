@@ -22,13 +22,13 @@ services:
       - "5000:5000"
     environment:
       DATABASE_URL: postgresql://user_admin:password_segura@db:5432/facturas_v1
-      FLASK_ENV: development
+      FLASK_ENV: dev
       JWT_SECRET_KEY: super-secret-key-123
     depends_on:
       - db
 
   frontend:
-    build: .  # <--- ALTERADO: Agora aponta para a raiz onde está o seu package.json
+    build: .  
     container_name: facturas_frontend
     ports:
       - "3000:3000"
