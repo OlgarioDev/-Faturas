@@ -24,13 +24,13 @@ def create_app(config_name="dev"):
     
 
     
-    app.register_blueprint(admin_bp, url_prefix='/api/admin')
-    app.register_blueprint(invoices_bp, url_prefix='/api/invoices')
-    app.register_blueprint(insights_bp, url_prefix='/api/insights')
-    app.register_blueprint(auth_bp, url_prefix='/api/auth')
-    app.register_blueprint(settings_bp, url_prefix='/api/settings')
-    app.register_blueprint(clients_bp, url_prefix='/api/clients')    
-    app.register_blueprint(products_bp, url_prefix='/api/products')  
+    app.register_blueprint(admin_bp, url_prefix='/admin')
+    app.register_blueprint(invoices_bp, url_prefix='/invoices')
+    app.register_blueprint(insights_bp, url_prefix='/insights')
+    app.register_blueprint(auth_bp, url_prefix='/auth')
+    app.register_blueprint(settings_bp, url_prefix='/settings')
+    app.register_blueprint(clients_bp, url_prefix='/clients')    
+    app.register_blueprint(products_bp, url_prefix='/products')  
     
 
     @app.route('/')

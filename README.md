@@ -90,8 +90,8 @@ PUT,/api/invoices/<id>,Atualiza estado (Liquidado/Anulada).
 
 
 Método,Rota,Descrição
-GET,/api/clients/,Lista de clientes para facturação.
-GET,/api/products/,Inventário de serviços e produtos.
+GET,/clients/,Lista de clientes para facturação.
+GET,/products/,Inventário de serviços e produtos.
 
 Cria um ficheiro .env no backend para configurar o acesso à base de dados:
 

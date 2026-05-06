@@ -64,8 +64,8 @@ function CreateInvoiceForm() {
     const fetchData = async () => {
       try {
         const [clientsData, productsData] = await Promise.all([
-          apiFetch('/api/clients/'),
-          apiFetch('/api/products/')
+          apiFetch('/clients/'),
+          apiFetch('/products/')
         ]);
         setClients(clientsData);
         setProducts(productsData);

@@ -44,7 +44,7 @@ export default function ProductsPage() {
   const fetchProducts = async () => {
     try {
       setIsLoading(true);
-      const data = await apiFetch("/api/products/");
+      const data = await apiFetch("/products/");
       
       const formattedProducts = data.map((p: APIProduct) => ({
         id: p.id,
@@ -100,12 +100,12 @@ export default function ProductsPage() {
 
     try {
       if (editingId) {
-        await apiFetch(`/api/products/${editingId}`, {
+        await apiFetch(`/products/${editingId}`, {
           method: "PUT",
           body: JSON.stringify(payload),
         });
       } else {
-        await apiFetch("/api/products/", {
+        await apiFetch("/products/", {
           method: "POST",
           body: JSON.stringify(payload),
         });
@@ -124,7 +124,7 @@ export default function ProductsPage() {
     if (!confirm("Deseja eliminar este item permanentemente?")) return;
 
     try {
-      await apiFetch(`/api/products/${id}`, {
+      await apiFetch(`/products/${id}`, {
         method: "DELETE",
       });
       await fetchProducts();
