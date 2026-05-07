@@ -46,7 +46,7 @@ export default function ClientsPage() {
   const fetchClients = async () => {
     try {
       setIsLoading(true);
-      const data = await apiFetch("/api/clients/");
+      const data = await apiFetch("/clients/");
       
       // Mapear os dados do backend para o formato que a tua UI espera
       const formattedClients = data.map((c: APIClient) => ({
@@ -94,13 +94,13 @@ export default function ClientsPage() {
     try {
       if (editingId) {
         // Atualizar existente
-        await apiFetch(`/api/clients/${editingId}`, {
+        await apiFetch(`/clients/${editingId}`, {
           method: "PUT",
           body: JSON.stringify(payload),
         });
       } else {
         // Criar novo
-        await apiFetch("/api/clients/", {
+        await apiFetch("/clients/", {
           method: "POST",
           body: JSON.stringify(payload),
         });
@@ -146,7 +146,7 @@ export default function ClientsPage() {
     if (!clientToDelete) return;
 
     try {
-      await apiFetch(`/api/clients/${clientToDelete}`, {
+      await apiFetch(`/clients/${clientToDelete}`, {
         method: "DELETE",
       });
       

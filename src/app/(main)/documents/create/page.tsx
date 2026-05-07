@@ -201,7 +201,7 @@ function CreateInvoiceForm() {
               />
               <datalist id="list-clients">
                 {clients.map((c) => (
-                  <option key={c.id} value={c.name || c.nome}>{c.nif} - {c.email}</option>
+                  <option key={c.id} value={c.name || c.nome}>{c.nif} - {c.email} - {c.endereco}</option>
                 ))}
               </datalist>
 
@@ -210,8 +210,8 @@ function CreateInvoiceForm() {
                 <div className="mt-4 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-start gap-3 animate-in fade-in zoom-in duration-300">
                   <MapPin size={16} className="text-blue-500 mt-1 shrink-0" />
                   <div>
-                    <p className="text-[10px] font-black uppercase text-blue-400 tracking-wider">Morada de Faturação (AGT)</p>
-                    <p className="text-xs font-bold text-blue-700 italic">{selectedClient.endereco || "Sem morada registada"}</p>
+                    <p className="text-[10px] font-black uppercase text-blue-400 tracking-wider"></p>
+                    <p className="text-xs font-bold text-blue-700 italic">{selectedClient.endereco }</p>
                   </div>
                 </div>
               )}
