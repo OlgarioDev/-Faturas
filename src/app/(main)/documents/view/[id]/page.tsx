@@ -63,7 +63,7 @@ function InvoiceViewContent() {
     const fetchData = async () => {
       try {
         const docId = params.id as string;
-        const data: APIDocument = await apiFetch(`/api/invoices/${docId}`);
+        const data: APIDocument = await apiFetch(`/invoices/${docId}`);
 
         if (!data) {
           setError("Documento não encontrado no servidor.");

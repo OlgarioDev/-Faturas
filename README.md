@@ -83,10 +83,10 @@ Documentação API: http://localhost:5000/apidocs (Se configurado com Flasgger)
 
 
 Método,Rota,Descrição
-GET,/api/invoices/,Lista todos os documentos (FT/FR).
-POST,/api/invoices/,Emite um novo documento fiscal.
-GET,/api/invoices/<id>,"Detalhes completos, linhas e morada do cliente."
-PUT,/api/invoices/<id>,Atualiza estado (Liquidado/Anulada).
+GET,/invoices/,Lista todos os documentos (FT/FR).
+POST,/invoices/,Emite um novo documento fiscal.
+GET,/invoices/<id>,"Detalhes completos, linhas e morada do cliente."
+PUT,/invoices/<id>,Atualiza estado (Liquidado/Anulada).
 
 
 Método,Rota,Descrição

@@ -46,7 +46,7 @@ export default function DocumentsPage() {
   const loadDocuments = async () => {
     try {
       setIsLoading(true);
-      const data = await apiFetch('/api/invoices/');
+      const data = await apiFetch('/invoices/');
       const mappedDocs = data.map((inv: APIInvoice) => ({
         id: inv.id,
         reference: inv.number || "Rascunho",
@@ -70,7 +70,7 @@ export default function DocumentsPage() {
   const handleMarkAsPaid = async (docId: string) => {
     if (confirm(`Confirmar o recebimento do pagamento para este documento?`)) {
       try {
-        await apiFetch(`/api/invoices/${docId}`, {
+        await apiFetch(`/invoices/${docId}`, {
           method: 'PUT',
           body: JSON.stringify({ status: 'Paga' })
         });

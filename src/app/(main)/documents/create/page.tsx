@@ -149,7 +149,7 @@ function CreateInvoiceForm() {
         }))
       };
 
-      await apiFetch('/api/invoices/', {
+      await apiFetch('/invoices/', {
         method: 'POST',
         body: JSON.stringify(payload)
       });

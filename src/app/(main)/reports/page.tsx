@@ -53,7 +53,7 @@ export default function ReportsPage() {
 
   const fetchData = async () => {
     try {
-      const data: RawAPIInvoice[] = await apiFetch('/api/invoices/');
+      const data: RawAPIInvoice[] = await apiFetch('/invoices/');
       
       const mappedInvoices = data.map((inv) => ({
         id: inv.number || inv.id.substring(0, 8),
