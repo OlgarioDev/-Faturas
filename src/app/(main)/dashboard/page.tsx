@@ -10,7 +10,7 @@ import {
   Download, FileCheck, ArrowLeftRight, FileCode, X,
   AlertCircle, LayoutTemplate, MousePointer2, Activity
 } from "lucide-react";
-import { getChurnRisk } from "@/services/api";
+import { getChurnRisk } from "@/services/churnService";
 
 interface InvoiceData {
   id: string;
