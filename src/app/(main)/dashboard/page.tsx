@@ -8,24 +8,24 @@ import { RecentInvoices } from "@/components/RecentInvoices";
 import { 
   DollarSign, FileText, Users, TrendingUp, Plus, 
   Download, FileCheck, ArrowLeftRight, FileCode, X,
-  AlertCircle, LayoutTemplate, MousePointer2, Activity
+  Activity, MousePointer2, LayoutTemplate, Loader2
 } from "lucide-react";
-import { getChurnRisk } from "@/services/api";
+import { getChurnRisk, apiFetch } from "@/services/api"; // Importação do apiFetch
 
 interface InvoiceData {
   id: string;
-  date: string;
+  created_at: string; // Backend usa created_at geralmente
   type: string;
-  clientNif: string;
-  total: number;
+  customer_name: string;
+  total_amount: number; // Alinhado com o backend
   status: string;
 }
 
 export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [hasInvoices, setHasInvoices] = useState(false); // NOVO: Controle de estado vazio
+  const [loading, setLoading] = useState(true);
+  const [hasInvoices, setHasInvoices] = useState(false);
   
-  // ESTADO PARA DADOS DOS CARDS
   const [realStats, setRealStats] = useState({
     faturacaoTotal: 0,
     pendentes: 0,
@@ -36,110 +36,95 @@ export default function Home() {
     churnRecommendation: ""
   });
 
-  // ESTADO PARA O GRÁFICO (Array de 12 meses)
   const [monthlyData, setMonthlyData] = useState<number[]>(new Array(12).fill(0));
 
-  // LÓGICA DE CÁLCULO E SINCRONIZAÇÃO
   useEffect(() => {
-    const faturas: InvoiceData[] = JSON.parse(localStorage.getItem("system_invoices") || "[]");
-    const clientes = JSON.parse(localStorage.getItem("facturas_clients") || "[]");
+    async function loadDashboardData() {
+      try {
+        setLoading(true);
+        // TAREFA 1: Migrar dashboard para API
+        const faturas: InvoiceData[] = await apiFetch('/invoices/');
+        const clientes = await apiFetch('/clients/');
 
-    // Lógica para detetar se há faturas
-    setHasInvoices(faturas.length > 0);
+        setHasInvoices(faturas.length > 0);
 
-    const totalsByMonth = new Array(12).fill(0);
+        const totalsByMonth = new Array(12).fill(0);
+        let totalAcumulado = 0;
+        let totalPendentes = 0;
+        let contPendentes = 0;
 
-    // 1. Calcular Totais e Dados do Gráfico
-    const total = faturas.reduce((acc: number, cur: InvoiceData) => {
-      const valor = Number(cur.total) || 0;
-      
-      // Lógica do Gráfico: Agrupar por mês da data (YYYY-MM-DD)
-      const dataDoc = new Date(cur.date);
-      if (!isNaN(dataDoc.getTime())) {
-        const mes = dataDoc.getMonth(); 
-        if (cur.type === "NC") {
-            totalsByMonth[mes] -= valor;
-        } else {
-            totalsByMonth[mes] += valor;
-        }
-      }
+        faturas.forEach((inv) => {
+          const valor = Number(inv.total_amount) || 0;
+          const dataDoc = new Date(inv.created_at);
 
-      // Total Geral (Subtrai Notas de Crédito)
-      return cur.type === "NC" ? acc - valor : acc + valor;
-    }, 0);
+          // Lógica do Gráfico
+          if (!isNaN(dataDoc.getTime())) {
+            const mes = dataDoc.getMonth();
+            if (inv.type === "NC") {
+              totalsByMonth[mes] -= valor;
+            } else {
+              totalsByMonth[mes] += valor;
+            }
+          }
 
-    // 2. Calcular Faturas Pendentes (FT emitidas mas não pagas)
-    const pendentesList = faturas.filter((f: InvoiceData) => f.type === "FT" && f.status === "Emitida");
-    const totalPendentes = pendentesList.reduce((acc: number, cur: InvoiceData) => acc + (Number(cur.total) || 0), 0);
+          // Cálculo de Totais (Líquido)
+          if (inv.type === "NC") {
+            totalAcumulado -= valor;
+          } else {
+            totalAcumulado += valor;
+          }
 
-    setRealStats({
-      faturacaoTotal: total,
-      pendentes: totalPendentes,
-      qtdPendentes: pendentesList.length,
-      novosClientes: clientes.length,
-      taxaConversao: faturas.length > 0 ? 100 : 0,
-      churnScore: 0,
-      churnRecommendation: ""
-    });
+          // Faturas Pendentes (FT emitidas mas aguardando liquidação)
+          if (inv.type === "FT" && inv.status !== "Paga" && inv.status !== "Anulada") {
+            totalPendentes += valor;
+            contPendentes++;
+          }
+        });
 
-    setMonthlyData(totalsByMonth);
-
-    // Call API to get churn risk
-    const fetchChurn = async () => {
-      // Usar um company_id estático para já (ex: 1)
-      const data = await getChurnRisk(1);
-      if (data && data.risk_score !== undefined) {
         setRealStats(prev => ({
           ...prev,
-          churnScore: data.risk_score,
-          churnRecommendation: data.recommendation || ""
+          faturacaoTotal: totalAcumulado,
+          pendentes: totalPendentes,
+          qtdPendentes: contPendentes,
+          novosClientes: clientes.length,
+          taxaConversao: faturas.length > 0 ? 100 : 0,
         }));
+
+        setMonthlyData(totalsByMonth);
+
+        // TAREFA 8: Dados reais no Churn (Usando ID do user logado se possível)
+        const churnData = await getChurnRisk(1); 
+        if (churnData) {
+          setRealStats(prev => ({
+            ...prev,
+            churnScore: churnData.risk_score || 0,
+            churnRecommendation: churnData.recommendation || ""
+          }));
+        }
+
+      } catch (error) {
+        console.error("Erro ao carregar dados do dashboard:", error);
+      } finally {
+        setLoading(false);
       }
-    };
-    fetchChurn();
-  }, []);
-
-  // FUNÇÃO PARA EXPORTAR SAFT-AO (NORMA AGT)
-  const handleExportSAFT = () => {
-    const invoices: InvoiceData[] = JSON.parse(localStorage.getItem("system_invoices") || "[]");
-    const company = JSON.parse(localStorage.getItem("empresa_config") || "{}");
-
-    if (!company.nif) {
-      alert("Por favor, configure os dados da empresa antes de exportar o SAFT.");
-      return;
     }
 
-    const xmlContent = `<?xml version="1.0" encoding="Windows-1252"?>
-<AuditFile xmlns="urn:OECD:StandardAuditFile-Tax:AO:1.01_01">
-  <Header>
-    <CompanyID>${company.nif}</CompanyID>
-    <TaxRegistrationNumber>${company.nif}</TaxRegistrationNumber>
-    <CompanyName>${company.nomeEmpresa}</CompanyName>
-    <BusinessName>${company.nomeEmpresa}</BusinessName>
-  </Header>
-  <SourceDocuments>
-    <SalesInvoices>
-      <NumberOfEntries>${invoices.length}</NumberOfEntries>
-      <TotalDebit>0.00</TotalDebit>
-      <TotalCredit>${realStats.faturacaoTotal.toFixed(2)}</TotalCredit>
-      ${invoices.map((inv: InvoiceData) => `
-      <Invoice>
-        <InvoiceNo>${inv.id}</InvoiceNo>
-        <InvoiceDate>${inv.date}</InvoiceDate>
-        <InvoiceType>${inv.type}</InvoiceType>
-        <CustomerID>${inv.clientNif || '999999999'}</CustomerID>
-        <Line><UnitPrice>${inv.total}</UnitPrice></Line>
-      </Invoice>`).join('')}
-    </SalesInvoices>
-  </SourceDocuments>
-</AuditFile>`;
+    loadDashboardData();
+  }, []);
 
-    const blob = new Blob([xmlContent], { type: 'text/xml' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `SAFT_AO_${company.nif}_2026.xml`;
-    link.click();
+  // TAREFA 4: Rota SAFT no backend
+  const handleExportSAFT = async () => {
+    try {
+      // Em vez de gerar no front, chamamos a rota que gera o XML real no Python
+      const response = await apiFetch('/saft/export/', { method: 'GET' });
+      if (response.url) {
+        window.location.href = response.url;
+      } else {
+        alert("Exportação SAFT iniciada. Verifique os seus downloads em instantes.");
+      }
+    } catch (error) {
+      alert("Erro ao exportar SAFT. Verifique as configurações da empresa.");
+    }
   };
 
   const documentTypes = [
@@ -148,15 +133,23 @@ export default function Home() {
     { id: "PP", name: "Pro-forma (PP)", icon: FileText, desc: "Orçamento sem valor fiscal", color: "bg-purple-50 text-purple-600" },
     { id: "NC", name: "Nota de Crédito (NC)", icon: ArrowLeftRight, desc: "Retificação/Anulação", color: "bg-red-50 text-red-600" },
     { id: "ND", name: "Nota de Débito (ND)", icon: TrendingUp, desc: "Ajuste de valor a favor", color: "bg-orange-50 text-orange-600" },
-    { id: "RS", name: "Rascunhos", icon: FileCode, desc: "Edição pendente", color: "bg-slate-100 text-slate-600" },
   ];
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-6 md:p-8 lg:p-10 relative">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black tracking-tight text-slate-900 uppercase italic leading-none">Dashboard</h2>
-          <p className="text-sm text-slate-500 font-medium mt-1">Visão Global do Negócio</p>
+          <p className="text-sm text-slate-500 font-medium mt-1">Visão Global do Negócio (Dados em Tempo Real)</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -175,10 +168,10 @@ export default function Home() {
         </div>
       </div>
 
-      {/* MODAL SELEÇÃO DOCUMENTO */}
+      {/* Modal Selection */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden">
             <div className="p-8 border-b border-slate-50 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="bg-blue-600 p-2 rounded-xl text-white"><FileText size={20}/></div>
@@ -197,7 +190,7 @@ export default function Home() {
                   className="flex items-start gap-4 p-5 rounded-[2rem] border border-slate-100 hover:border-slate-900 hover:bg-slate-50 transition-all group"
                   onClick={() => setIsModalOpen(false)}
                 >
-                  <div className={`p-3 rounded-2xl transition-all ${doc.color} group-hover:scale-110`}>
+                  <div className={`p-3 rounded-2xl ${doc.color} group-hover:scale-110 transition-transform`}>
                     <doc.icon size={18} />
                   </div>
                   <div>
@@ -211,7 +204,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* CARDS COM DADOS REAIS */}
+      {/* Cards Section */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard 
           title="Faturação Total" 
@@ -242,7 +235,7 @@ export default function Home() {
         />
       </div>
 
-      {/* ÁREA DE GRÁFICOS / ESTADO VAZIO */}
+      {/* Main Content Area */}
       {hasInvoices ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
           <div className="col-span-4 bg-white p-6 rounded-[2.5rem] border shadow-sm">
@@ -253,10 +246,10 @@ export default function Home() {
           </div>
         </div>
       ) : (
-        <div className="w-full bg-white border border-slate-100 rounded-[3rem] p-12 md:p-20 shadow-sm flex flex-col items-center text-center animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="w-full bg-white border border-slate-100 rounded-[3rem] p-12 md:p-20 shadow-sm flex flex-col items-center text-center">
           <div className="w-24 h-24 bg-slate-50 rounded-[2rem] flex items-center justify-center mb-8 relative">
             <LayoutTemplate className="text-slate-300" size={48} />
-            <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white border-4 border-white shadow-lg animate-bounce">
+            <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white border-4 border-white shadow-lg">
               <Plus size={20} />
             </div>
           </div>
@@ -267,7 +260,7 @@ export default function Home() {
           </p>
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="mt-10 flex items-center gap-3 bg-[#0f172a] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-slate-800 transition-all transform hover:scale-105 active:scale-95"
+            className="mt-10 flex items-center gap-3 bg-[#0f172a] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-slate-800 transition-all"
           >
             <MousePointer2 size={16} /> Começar Faturação
           </button>
