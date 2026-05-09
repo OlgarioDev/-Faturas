@@ -21,6 +21,9 @@ class Invoice(db.Model):
     document_number = db.Column(db.String(50), unique=True, nullable=True) 
     status = db.Column(db.String(20), nullable=False, default='Rascunho') 
     
+    # 🔥 NOVO CAMPO: Referência para a fatura original (usado em Notas de Crédito)
+    related_document_id = db.Column(db.String(36), db.ForeignKey('invoices.id'), nullable=True)
+    
     # Datas e Valores
     issue_date = db.Column(db.DateTime, default=datetime.utcnow)
     due_date = db.Column(db.DateTime, nullable=True)
@@ -29,7 +32,7 @@ class Invoice(db.Model):
     total_tax = db.Column(db.Float, nullable=False, default=0.0) 
     total_gross = db.Column(db.Float, nullable=False, default=0.0) 
     
-    # Campo de observações no cabeçalho
+    # Campo de observações no cabeçalho da fatura
     observations = db.Column(db.Text, nullable=True)
 
     # Relacionamentos
@@ -51,7 +54,7 @@ class InvoiceLine(db.Model):
     unit_price = db.Column(db.Float, nullable=False)
     tax_percentage = db.Column(db.Float, nullable=False, default=14.0)
     
-    # 🔥 NOVO CAMPO: Desconto por linha (em percentagem)
+    # Campo de desconto por linha (em percentagem)
     discount = db.Column(db.Float, nullable=False, default=0.0)
     
     line_total_net = db.Column(db.Float, nullable=False)
