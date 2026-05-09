@@ -7,17 +7,17 @@ import { BillingChart } from "@/components/BillingChart";
 import { RecentInvoices } from "@/components/RecentInvoices";
 import { 
   DollarSign, FileText, Users, TrendingUp, Plus, 
-  Download, FileCheck, ArrowLeftRight, FileCode, X,
+  Download, FileCheck, ArrowLeftRight, X,
   Activity, MousePointer2, LayoutTemplate, Loader2
 } from "lucide-react";
-import { getChurnRisk, apiFetch } from "@/services/api"; // Importação do apiFetch
+import { getChurnRisk, apiFetch } from "@/services/api";
 
 interface InvoiceData {
   id: string;
-  created_at: string; // Backend usa created_at geralmente
+  created_at: string; 
   type: string;
   customer_name: string;
-  total_amount: number; // Alinhado com o backend
+  total_amount: number; 
   status: string;
 }
 
@@ -42,57 +42,55 @@ export default function Home() {
     async function loadDashboardData() {
       try {
         setLoading(true);
-        // TAREFA 1: Migrar dashboard para API
+        
+        // TAREFA 1: Sincronização com Supabase via API Python
         const faturas: InvoiceData[] = await apiFetch('/invoices/');
         const clientes = await apiFetch('/clients/');
 
-        setHasInvoices(faturas.length > 0);
+        setHasInvoices(faturas && faturas.length > 0);
 
         const totalsByMonth = new Array(12).fill(0);
         let totalAcumulado = 0;
         let totalPendentes = 0;
         let contPendentes = 0;
 
-        faturas.forEach((inv) => {
-          const valor = Number(inv.total_amount) || 0;
-          const dataDoc = new Date(inv.created_at);
+        if (faturas && Array.isArray(faturas)) {
+          faturas.forEach((inv) => {
+            const valor = Number(inv.total_amount) || 0;
+            const dataDoc = new Date(inv.created_at);
 
-          // Lógica do Gráfico
-          if (!isNaN(dataDoc.getTime())) {
-            const mes = dataDoc.getMonth();
-            if (inv.type === "NC") {
-              totalsByMonth[mes] -= valor;
-            } else {
-              totalsByMonth[mes] += valor;
+            if (!isNaN(dataDoc.getTime())) {
+              const mes = dataDoc.getMonth();
+              // Lógica de Notas de Crédito (Subtrai do gráfico e total)
+              if (inv.type === "NC") {
+                totalsByMonth[mes] -= valor;
+                totalAcumulado -= valor;
+              } else {
+                totalsByMonth[mes] += valor;
+                totalAcumulado += valor;
+              }
             }
-          }
 
-          // Cálculo de Totais (Líquido)
-          if (inv.type === "NC") {
-            totalAcumulado -= valor;
-          } else {
-            totalAcumulado += valor;
-          }
-
-          // Faturas Pendentes (FT emitidas mas aguardando liquidação)
-          if (inv.type === "FT" && inv.status !== "Paga" && inv.status !== "Anulada") {
-            totalPendentes += valor;
-            contPendentes++;
-          }
-        });
+            // Faturas Pendentes (FT emitidas mas aguardando liquidação)
+            if (inv.type === "FT" && inv.status !== "Paga" && inv.status !== "Anulada") {
+              totalPendentes += valor;
+              contPendentes++;
+            }
+          });
+        }
 
         setRealStats(prev => ({
           ...prev,
           faturacaoTotal: totalAcumulado,
           pendentes: totalPendentes,
           qtdPendentes: contPendentes,
-          novosClientes: clientes.length,
-          taxaConversao: faturas.length > 0 ? 100 : 0,
+          novosClientes: clientes ? clientes.length : 0,
+          taxaConversao: (faturas && faturas.length > 0) ? 100 : 0,
         }));
 
         setMonthlyData(totalsByMonth);
 
-        // TAREFA 8: Dados reais no Churn (Usando ID do user logado se possível)
+        // TAREFA 8: Insights de Churn via IA
         const churnData = await getChurnRisk(1); 
         if (churnData) {
           setRealStats(prev => ({
@@ -103,7 +101,7 @@ export default function Home() {
         }
 
       } catch (error) {
-        console.error("Erro ao carregar dados do dashboard:", error);
+        console.error("Erro ao carregar dashboard:", error);
       } finally {
         setLoading(false);
       }
@@ -112,18 +110,20 @@ export default function Home() {
     loadDashboardData();
   }, []);
 
-  // TAREFA 4: Rota SAFT no backend
-  const handleExportSAFT = async () => {
+  // TAREFA 4: Exportação SAFT via Backend (Download Direto)
+  const handleExportSAFT = () => {
     try {
-      // Em vez de gerar no front, chamamos a rota que gera o XML real no Python
-      const response = await apiFetch('/saft/export/', { method: 'GET' });
-      if (response.url) {
-        window.location.href = response.url;
-      } else {
-        alert("Exportação SAFT iniciada. Verifique os seus downloads em instantes.");
-      }
+      // Definimos a URL do backend (ajuste se a sua porta for diferente)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      
+      // Abrimos a rota de exportação em uma nova aba para disparar o download do XML gerado pelo Python
+      // Isso ignora qualquer validação local de "dados da empresa" e confia no banco de dados
+      window.open(`${apiUrl}/api/saft/export/`, '_blank');
+      
+      console.log("Solicitação de download SAFT enviada ao servidor Python.");
     } catch (error) {
-      alert("Erro ao exportar SAFT. Verifique as configurações da empresa.");
+      console.error("Erro ao processar SAFT:", error);
+      alert("Não foi possível gerar o SAFT. Verifique a conexão com o servidor.");
     }
   };
 
@@ -149,7 +149,7 @@ export default function Home() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black tracking-tight text-slate-900 uppercase italic leading-none">Dashboard</h2>
-          <p className="text-sm text-slate-500 font-medium mt-1">Visão Global do Negócio (Dados em Tempo Real)</p>
+          <p className="text-sm text-slate-500 font-medium mt-1">Dados Sincronizados com Supabase</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -168,7 +168,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Modal Selection */}
+      {/* Modal de Seleção de Documento */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden">
@@ -204,7 +204,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Cards Section */}
+      {/* Seção de Métricas Principais */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard 
           title="Faturação Total" 
@@ -229,13 +229,13 @@ export default function Home() {
         <MetricCard 
           title="Risco de Churn" 
           value={realStats.churnScore > 0 ? `${(realStats.churnScore * 100).toFixed(0)}%` : '---'} 
-          trend={realStats.churnRecommendation ? realStats.churnRecommendation.substring(0, 20) + '...' : 'Análise IA em curso'} 
+          trend={realStats.churnRecommendation ? realStats.churnRecommendation.substring(0, 20) + '...' : 'Análise IA'} 
           trendUp={realStats.churnScore < 0.5} 
           icon={Activity} 
         />
       </div>
 
-      {/* Main Content Area */}
+      {/* Gráfico e Faturas Recentes */}
       {hasInvoices ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
           <div className="col-span-4 bg-white p-6 rounded-[2.5rem] border shadow-sm">
@@ -246,6 +246,7 @@ export default function Home() {
           </div>
         </div>
       ) : (
+        /* Estado Vazio (Zero Data) */
         <div className="w-full bg-white border border-slate-100 rounded-[3rem] p-12 md:p-20 shadow-sm flex flex-col items-center text-center">
           <div className="w-24 h-24 bg-slate-50 rounded-[2rem] flex items-center justify-center mb-8 relative">
             <LayoutTemplate className="text-slate-300" size={48} />
@@ -256,7 +257,7 @@ export default function Home() {
           <h3 className="text-2xl font-black text-[#0f172a] uppercase italic tracking-tight">O seu arquivo está pronto</h3>
           <p className="text-slate-500 max-w-md mt-4 font-medium leading-relaxed">
             Ainda não emitiu faturas ou documentos este mês. <br /> 
-            Clique no botão abaixo para criar o seu primeiro documento fiscal certificado pela AGT.
+            Clique no botão abaixo para criar o seu primeiro documento fiscal certificado.
           </p>
           <button 
             onClick={() => setIsModalOpen(true)}

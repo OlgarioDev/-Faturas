@@ -21,6 +21,7 @@ def create_app(config_name="dev"):
     from .routes.settings import settings_bp
     from .routes.clients import clients_bp   
     from .routes.products import products_bp 
+    from app.routes.saft import saft_bp
     
 
     
@@ -31,7 +32,7 @@ def create_app(config_name="dev"):
     app.register_blueprint(settings_bp, url_prefix='/settings')
     app.register_blueprint(clients_bp, url_prefix='/clients')    
     app.register_blueprint(products_bp, url_prefix='/products')  
-    
+    app.register_blueprint(saft_bp, url_prefix='/api/saft')
 
     @app.route('/')
     def index():
