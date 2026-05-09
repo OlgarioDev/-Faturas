@@ -6,8 +6,8 @@ from .extensions import db, ma, jwt
 def create_app(config_name="dev"):
     app = Flask(__name__)
     
-    # CORS configurado para aceitar os headers do Frontend
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # CORS: Permitir tudo em desenvolvimento para evitar o bloqueio dos OPTIONS
+    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
     
     app.config.from_object(config_by_name[config_name])
 
@@ -26,22 +26,18 @@ def create_app(config_name="dev"):
     from .routes.products import products_bp 
     from .routes.saft import saft_bp
     
-    # REGISTO DAS ROTAS COM PREFIXO /api (Harmonização com o Frontend)
+    # REGISTO ÚNICO DOS PREFIXOS
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(invoices_bp, url_prefix='/api/invoices')
     app.register_blueprint(insights_bp, url_prefix='/api/insights')
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
-    app.register_blueprint(settings_bp, url_prefix='/api/settings') # Atenção aqui!
+    app.register_blueprint(settings_bp, url_prefix='/api/settings')
     app.register_blueprint(clients_bp, url_prefix='/api/clients')    
     app.register_blueprint(products_bp, url_prefix='/api/products')  
     app.register_blueprint(saft_bp, url_prefix='/api/saft')
 
     @app.route('/')
     def index():
-        return {
-            "status": "online",
-            "message": "A API do +Facturas está a funcionar corretamente!",
-            "docs": "Aceda às rotas /api/* para utilizar os serviços."
-        }, 200
+        return {"status": "online", "message": "API +Facturas ativa"}, 200
 
     return app
