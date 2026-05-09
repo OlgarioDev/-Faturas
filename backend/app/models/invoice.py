@@ -29,7 +29,7 @@ class Invoice(db.Model):
     total_tax = db.Column(db.Float, nullable=False, default=0.0) 
     total_gross = db.Column(db.Float, nullable=False, default=0.0) 
     
-    # CORREÇÃO: Campo adicionado ao cabeçalho da fatura
+    # Campo de observações no cabeçalho
     observations = db.Column(db.Text, nullable=True)
 
     # Relacionamentos
@@ -44,17 +44,20 @@ class InvoiceLine(db.Model):
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     
     invoice_id = db.Column(db.String(36), db.ForeignKey('invoices.id'), nullable=False)
-    product_id = db.Column(db.String(36), db.ForeignKey('products.id'), nullable=True) # Alterado para nullable se houver descrições manuais
+    product_id = db.Column(db.String(36), db.ForeignKey('products.id'), nullable=True) 
     
     description = db.Column(db.String(255), nullable=False)
     quantity = db.Column(db.Float, nullable=False, default=1.0)
     unit_price = db.Column(db.Float, nullable=False)
     tax_percentage = db.Column(db.Float, nullable=False, default=14.0)
     
+    # 🔥 NOVO CAMPO: Desconto por linha (em percentagem)
+    discount = db.Column(db.Float, nullable=False, default=0.0)
+    
     line_total_net = db.Column(db.Float, nullable=False)
     line_total_tax = db.Column(db.Float, nullable=False)
 
-    # Nota: Mantive aqui também caso queiras observações por cada item específico
+    # Observações por cada item específico
     observations = db.Column(db.Text, nullable=True)
     
     product = db.relationship('Product')
