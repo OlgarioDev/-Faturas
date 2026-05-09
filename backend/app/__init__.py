@@ -5,7 +5,10 @@ from .extensions import db, ma, jwt
 
 def create_app(config_name="dev"):
     app = Flask(__name__)
-    CORS(app)
+    
+    # CORS configurado para aceitar os headers do Frontend
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    
     app.config.from_object(config_by_name[config_name])
 
     # Initialize extensions
@@ -13,7 +16,7 @@ def create_app(config_name="dev"):
     ma.init_app(app)
     jwt.init_app(app)
 
-    # Register Blueprints
+    # Import Blueprints
     from .routes.admin import admin_bp
     from .routes.invoices import invoices_bp
     from .routes.insights import insights_bp
@@ -21,17 +24,16 @@ def create_app(config_name="dev"):
     from .routes.settings import settings_bp
     from .routes.clients import clients_bp   
     from .routes.products import products_bp 
-    from app.routes.saft import saft_bp
+    from .routes.saft import saft_bp
     
-
-    
-    app.register_blueprint(admin_bp, url_prefix='/admin')
-    app.register_blueprint(invoices_bp, url_prefix='/invoices')
-    app.register_blueprint(insights_bp, url_prefix='/insights')
-    app.register_blueprint(auth_bp, url_prefix='/auth')
-    app.register_blueprint(settings_bp, url_prefix='/settings')
-    app.register_blueprint(clients_bp, url_prefix='/clients')    
-    app.register_blueprint(products_bp, url_prefix='/products')  
+    # REGISTO DAS ROTAS COM PREFIXO /api (Harmonização com o Frontend)
+    app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    app.register_blueprint(invoices_bp, url_prefix='/api/invoices')
+    app.register_blueprint(insights_bp, url_prefix='/api/insights')
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    app.register_blueprint(settings_bp, url_prefix='/api/settings') # Atenção aqui!
+    app.register_blueprint(clients_bp, url_prefix='/api/clients')    
+    app.register_blueprint(products_bp, url_prefix='/api/products')  
     app.register_blueprint(saft_bp, url_prefix='/api/saft')
 
     @app.route('/')
