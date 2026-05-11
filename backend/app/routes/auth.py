@@ -5,64 +5,46 @@ from app.models.core import User, Company, SubscriptionStatus
 from app.extensions import db
 import traceback
 
-# REMOVIDO o url_prefix daqui! O prefixo /api/auth é definido no __init__.py
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/sync', methods=['POST'])
 @require_auth
-def sync_profile(current_user): # Recebe o utilizador injetado pelo middleware
-    """
-    Sincroniza o utilizador do Supabase com a base de dados local.
-    Cria a Empresa e o Utilizador se for o primeiro login.
-    """
+def sync_profile(): # REMOVIDO current_user daqui
     try:
-        # O current_user aqui é o dicionário/objeto vindo do Supabase via Middleware
-        supabase_id = current_user.get('id')
-        email = current_user.get('email')
-        metadata = current_user.get('user_metadata', {})
+        # O middleware coloca o utilizador aqui:
+        supabase_user = getattr(request, 'current_user', None)
         
-        # Extração de metadados (preenchidos no momento do registo no Frontend)
+        if not supabase_user:
+            return jsonify({"error": "Token inválido ou utilizador não encontrado no request"}), 401
+            
+        supabase_id = supabase_user.get('id')
+        email = supabase_user.get('email')
+        metadata = supabase_user.get('user_metadata', {})
+        
         company_name = metadata.get('company_name', 'Empresa Individual')
         nif = metadata.get('nif', '999999999')
-        
-        if not supabase_id:
-            return jsonify({"error": "ID do Supabase ausente"}), 400
 
-        # 1. Verificar se o utilizador já existe na nossa DB
+        # 1. Verificar se o utilizador já existe
         user = User.query.filter_by(supabase_auth_id=supabase_id).first()
         
         if not user:
-            # 2. Se não existe, verificar se a Empresa já existe pelo NIF
+            # 2. Verificar Empresa
             company = Company.query.filter_by(nif=nif).first()
-            
             if not company:
-                # Criar nova empresa se o NIF for novo
-                company = Company(
-                    name=company_name, 
-                    nif=nif,
-                    tax_regime='Geral' # Padrão para Angola
-                )
+                company = Company(name=company_name, nif=nif, tax_regime='Geral')
                 db.session.add(company)
-                db.session.commit() # Commit para gerar o ID da empresa
+                db.session.commit()
             
-            # 3. Criar o utilizador local vinculado à empresa
+            # 3. Criar Utilizador
             user = User(
                 supabase_auth_id=supabase_id,
                 email=email,
                 company_id=company.id,
-                role="admin" # O primeiro utilizador da empresa é admin
+                role="admin"
             )
             db.session.add(user)
             db.session.commit()
             
-        # 4. Verificação de Segurança (Conta Suspensa)
-        if hasattr(user, 'status') and user.status == SubscriptionStatus.SUSPENDED_BY_ADMIN:
-            return jsonify({
-                "error": "Conta suspensa. Contacte o suporte.", 
-                "status": "suspended"
-            }), 403
-            
-        # 5. Retornar os dados sincronizados
         return jsonify({
             "message": "Sincronizado com sucesso",
             "user": {
@@ -76,6 +58,6 @@ def sync_profile(current_user): # Recebe o utilizador injetado pelo middleware
 
     except Exception as e:
         db.session.rollback()
-        print("--- ERRO NA SINCRONIZAÇÃO DE PERFIL ---")
+        print(f"ERRO SYNC: {str(e)}")
         traceback.print_exc()
-        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
+        return jsonify({"error": "Erro interno no servidor"}), 500

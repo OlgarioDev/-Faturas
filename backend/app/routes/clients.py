@@ -1,17 +1,27 @@
-# backend/app/routes/clients.py
 from flask import Blueprint, request, jsonify
 from app.models.client import Client
+from app.models.core import User # Necessário para buscar a empresa do utilizador
 from app.extensions import db
 from app.middleware import require_auth
 
-# Mantemos sem url_prefix aqui, pois já definimos no __init__.py
 clients_bp = Blueprint('clients', __name__)
+
+def get_local_user():
+    """Auxiliar para buscar o utilizador da DB local usando o ID do Supabase"""
+    supabase_user = getattr(request, 'current_user', None)
+    if not supabase_user:
+        return None
+    return User.query.filter_by(supabase_auth_id=supabase_user.get('id')).first()
 
 @clients_bp.route('/', methods=['GET'])
 @require_auth
-def get_clients(current_user): # O middleware injeta o utilizador aqui
-    # FILTRO CRÍTICO: Buscar apenas clientes da empresa do utilizador logado
-    clients = Client.query.filter_by(company_id=current_user.company_id).all()
+def get_clients(): # REMOVIDO o argumento current_user
+    user = get_local_user()
+    if not user:
+        return jsonify({"error": "Utilizador não sincronizado"}), 401
+
+    # Busca apenas os clientes da empresa do utilizador
+    clients = Client.query.filter_by(company_id=user.company_id).all()
     
     result = [{
         "id": c.id,
@@ -27,14 +37,15 @@ def get_clients(current_user): # O middleware injeta o utilizador aqui
 
 @clients_bp.route('/', methods=['POST'])
 @require_auth
-def create_client(current_user):
+def create_client(): # REMOVIDO o argumento current_user
+    user = get_local_user()
     data = request.get_json()
     
     if not data or not data.get('name'):
         return jsonify({"error": "O nome do cliente é obrigatório."}), 400
         
     new_client = Client(
-        company_id=current_user.company_id, # VINCULA O CLIENTE À EMPRESA CERTA
+        company_id=user.company_id,
         name=data.get('name'),
         nif=data.get('nif'),
         address=data.get('address'),
@@ -53,16 +64,15 @@ def create_client(current_user):
 
 @clients_bp.route('/<client_id>', methods=['PUT'])
 @require_auth
-def update_client(current_user, client_id):
-    # Garante que o cliente existe E pertence à empresa do utilizador
-    client = Client.query.filter_by(id=client_id, company_id=current_user.company_id).first()
+def update_client(client_id): # REMOVIDO o argumento current_user
+    user = get_local_user()
+    client = Client.query.filter_by(id=client_id, company_id=user.company_id).first()
     
     if not client:
         return jsonify({"error": "Cliente não encontrado ou sem permissão."}), 404
         
     data = request.get_json()
     
-    # Atualização segura
     client.name = data.get('name', client.name)
     client.nif = data.get('nif', client.nif)
     client.address = data.get('address', client.address)
@@ -75,16 +85,12 @@ def update_client(current_user, client_id):
 
 @clients_bp.route('/<client_id>', methods=['DELETE'])
 @require_auth
-def delete_client(current_user, client_id):
-    # Garante que só apaga se o cliente for da própria empresa
-    client = Client.query.filter_by(id=client_id, company_id=current_user.company_id).first()
+def delete_client(client_id): # REMOVIDO o argumento current_user
+    user = get_local_user()
+    client = Client.query.filter_by(id=client_id, company_id=user.company_id).first()
     
     if not client:
         return jsonify({"error": "Cliente não encontrado."}), 404
-        
-    # Verificação básica de integridade (Opcional por agora)
-    # if len(client.invoices) > 0:
-    #     return jsonify({"error": "Não pode apagar um cliente que já tem faturas."}), 400
     
     try:
         db.session.delete(client)
@@ -92,4 +98,4 @@ def delete_client(current_user, client_id):
         return jsonify({"message": "Cliente eliminado com sucesso"}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": "Erro ao eliminar: Verifique se o cliente tem documentos associados."}), 400
+        return jsonify({"error": "Erro ao eliminar: O cliente pode ter faturas associadas."}), 400
