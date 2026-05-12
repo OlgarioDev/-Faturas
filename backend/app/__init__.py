@@ -1,3 +1,4 @@
+# backend/app/__init__.py
 from flask import Flask
 from flask_cors import CORS
 from .config import config_by_name
@@ -6,11 +7,21 @@ from .extensions import db, ma, jwt
 def create_app(config_name="dev"):
     app = Flask(__name__)
     
-    # CORS: Essencial para o Frontend conseguir falar com o Backend
-    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+    # --- CONFIGURAÇÃO DE CORS (CORRIGIDA) ---
+    # 1. Especificamos a origem do Frontend (localhost:3000)
+    # 2. Permitimos o header de Authorization explicitamente
+    # 3. Removemos o "*" para evitar bloqueios de segurança do browser
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": ["http://localhost:3000"],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"]
+        }
+    }, supports_credentials=True)
     
     app.config.from_object(config_by_name[config_name])
 
+    # Inicialização das extensões
     db.init_app(app)
     ma.init_app(app)
     jwt.init_app(app)
@@ -25,8 +36,8 @@ def create_app(config_name="dev"):
     from .routes.products import products_bp 
     from .routes.saft import saft_bp
     
-    # REGISTO CENTRALIZADO COM PREFIXO /api
-    # Isto evita confusão e garante que o Frontend encontre as rotas
+    # --- REGISTO DE ROTAS ---
+    # Com estes prefixos, o Frontend deve chamar: http://localhost:5000/api/...
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(invoices_bp, url_prefix='/api/invoices')
     app.register_blueprint(clients_bp, url_prefix='/api/clients')    
@@ -38,6 +49,10 @@ def create_app(config_name="dev"):
 
     @app.route('/')
     def index():
-        return {"status": "online", "message": "API +Facturas ligada!"}, 200
+        return {
+            "status": "online", 
+            "message": "API +Facturas ligada!",
+            "version": "1.0.0"
+        }, 200
 
     return app

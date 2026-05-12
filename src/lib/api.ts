@@ -1,5 +1,5 @@
 // src/lib/api.ts
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api").replace(/\/$/, "");
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers);
@@ -21,30 +21,23 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     // 2. FALLBACK: Se o Supabase falhar, tenta o user_session
     if (!token) {
       const sessionData = localStorage.getItem("user_session") || "";
-      // Um JWT tem sempre 3 partes separadas por pontos. Se não tiver, ignoramos.
       if (sessionData.split('.').length === 3) {
         token = sessionData;
       } else {
         try {
-          // Pode ser que o user_session seja um objeto JSON que contém o token
           const parsed = JSON.parse(sessionData);
           token = parsed.access_token || "";
-        } catch(e) {
-          // Ignorar, não é um token válido
-        }
+        } catch(e) {}
       }
     }
   } catch (e) {
     console.error("Erro ao ler token de autenticação", e);
   }
 
-  // Deixa um pequeno rasto na consola do browser (F12) para debug
-  console.log("A enviar token:", token ? token.substring(0, 15) + "..." : "NENHUM TOKEN ENCONTRADO");
-
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   } else {
-    console.warn("Nenhum token JWT válido encontrado no Frontend!");
+    console.warn("[DEBUG API] Nenhum token JWT válido encontrado no Frontend!");
   }
 
   const config: RequestInit = {
@@ -52,13 +45,29 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     headers,
   };
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, config);
+  // CORREÇÃO CRÍTICA: Garante que o URL final é sempre válido (ex: /api/clients/)
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const finalUrl = `${BASE_URL}${cleanEndpoint}`;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Erro na API (${response.status}): ${errorText}`);
+  console.log(`[DEBUG API] A tentar contactar: ${finalUrl}`);
+  console.log(`[DEBUG API] Token: ${token ? token.substring(0, 15) + "..." : "NENHUM"}`);
+
+  try {
+    const response = await fetch(finalUrl, config);
+    
+    console.log(`[DEBUG API] Resposta de ${finalUrl}: Status ${response.status}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[DEBUG API] ERRO DO SERVIDOR:`, errorText);
+      throw new Error(`Erro na API (${response.status}): ${errorText}`);
+    }
+
+    const text = await response.text();
+    return text ? JSON.parse(text) : {};
+    
+  } catch (error) {
+    console.error(`[DEBUG API] FALHA DE REDE ao contactar ${finalUrl}:`, error);
+    throw error;
   }
-
-  const text = await response.text();
-  return text ? JSON.parse(text) : {};
 }

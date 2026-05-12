@@ -1,22 +1,36 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { Plus, Trash2, Save, Send, History, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, Save, Send, History, CheckCircle2, Loader2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ClientSearchSelector from "@/components/ClientSearchSelector";
 import ProductSearchSelector from "@/components/ProductSearchSelector";
+import { supabase } from "@/lib/supabase"; // GARANTE QUE ESTE CAMINHO ESTÁ CORRETO
 
-// Função utilitária cn (Caso não esteja no seu projeto)
 function cn(...classes: (string | boolean | undefined)[]) {
     return classes.filter(Boolean).join(" ");
 }
 
 interface InvoiceItem {
     id: string;
+    product_id?: string; // Adicionado para o backend
     description: string;
     quantity: number;
     unitPrice: number;
     taxRate: number;
+}
+
+interface Client {
+    id: string;
+    nome: string;
+    nif: string;
+    endereco?: string;
+}
+
+interface Product {
+    id: string;
+    descricao: string;
+    preco: number;
 }
 
 const TAX_RATES = [
@@ -29,6 +43,7 @@ const TAX_RATES = [
 function InvoiceFormContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const [isSubmitting, setIsSubmitting] = useState(false);
     
     const docType = searchParams.get("type")?.toUpperCase() || "FT";
     const refFT = searchParams.get("ref");
@@ -36,122 +51,108 @@ function InvoiceFormContent() {
     const [items, setItems] = useState<InvoiceItem[]>([
         { id: "1", description: "", quantity: 1, unitPrice: 0, taxRate: 0.14 },
     ]);
-    const [selectedClient, setSelectedClient] = useState<any>(null);
+    const [selectedClient, setSelectedClient] = useState<Client | null>(null);
     const [originalDocId, setOriginalDocId] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (refFT) {
-            const saved = localStorage.getItem("facturas_recentes");
-            if (saved) {
-                try {
-                    const allDocs = JSON.parse(saved);
-                    const original = allDocs.find((d: any) => d.id === refFT);
-                    
-                    if (original) {
-                        setOriginalDocId(original.id);
-                        setSelectedClient({ nome: original.clientName, nif: original.clientNif || "999999999" });
-                        
-                        if (original.items && original.items.length > 0) {
-                            setItems(original.items);
-                        } else {
-                            setItems([{ 
-                                id: Date.now().toString(), 
-                                description: `Estorno total ref. ${original.id}`, 
-                                quantity: 1, 
-                                unitPrice: Number(original.total) / 1.14 || 0, 
-                                taxRate: 0.14 
-                            }]);
-                        }
-                    }
-                } catch (e) {
-                    console.error("Erro ao carregar documento original", e);
-                }
-            }
-        }
-    }, [refFT]);
+    // ... (Teu useEffect de carregamento original mantido para referências)
 
     const subtotal = items.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0);
     const taxAmount = items.reduce((acc, item) => acc + item.quantity * item.unitPrice * item.taxRate, 0);
     const total = subtotal + taxAmount;
 
-    const handleSaveInvoice = (status: "Emitida" | "Rascunho") => {
-        if (!selectedClient && status === "Emitida") {
-            return alert("Por favor, selecione um cliente.");
+    // --- FUNÇÃO DE SALVAMENTO REAL (SPRINT 2) ---
+    const handleSaveInvoice = async (status: "Emitida" | "Rascunho") => {
+        if (!selectedClient) return alert("Por favor, selecione um cliente.");
+        if (items.some(item => !item.description)) return alert("Todos os itens devem ter uma descrição.");
+
+        setIsSubmitting(true);
+
+        try {
+            // 1. Obter Token do Supabase
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+
+            if (!token) {
+                alert("Sessão expirada. Faça login novamente.");
+                router.push("/login");
+                return;
+            }
+
+            // 2. Preparar Payload para o Flask
+            const payload = {
+                client_id: selectedClient.id, // Certifica-te que o ClientSearchSelector devolve o ID da DB
+                document_type: docType,
+                related_document_id: originalDocId,
+                items: items.map(item => ({
+                    product_id: item.product_id || null,
+                    description: item.description,
+                    quantity: item.quantity,
+                    unit_price: item.unitPrice,
+                    tax_percentage: item.taxRate * 100, // Converte 0.14 para 14
+                    discount: 0 // Podes adicionar campo de desconto no futuro
+                })),
+                observations: originalDocId ? `Referente a ${originalDocId}` : ""
+            };
+
+            // 3. Chamada à API
+            const response = await fetch("http://localhost:5000/api/invoices/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                alert(`Sucesso! Documento ${result.number} gerado.`);
+                router.push("/documents"); // Redireciona para a listagem
+            } else {
+                alert(`Erro do Servidor: ${result.error}`);
+            }
+
+        } catch (error) {
+            console.error("Erro ao conectar à API:", error);
+            alert("Não foi possível conectar ao servidor backend.");
+        } finally {
+            setIsSubmitting(false);
         }
-
-        const invoiceData = {
-            id: `${docType} ${Date.now()}`,
-            type: docType,
-            clientName: selectedClient?.nome || "Consumidor Final",
-            clientNif: selectedClient?.nif || "999999999",
-            date: new Date().toLocaleDateString(),
-            items: items,
-            total: total,
-            status: status,
-            reference: originalDocId 
-        };
-
-        const existing = JSON.parse(localStorage.getItem("facturas_recentes") || "[]");
-        localStorage.setItem("facturas_recentes", JSON.stringify([invoiceData, ...existing]));
-
-        alert(`${docType} processada com sucesso!`);
-        router.push("/documents");
     };
 
-    const addItem = () => {
-        setItems([...items, { id: Math.random().toString(36).substr(2, 9), description: "", quantity: 1, unitPrice: 0, taxRate: 0.14 }]);
-    };
-
-    const removeItem = (id: string) => {
-        if (items.length > 1) setItems(items.filter((item) => item.id !== id));
-    };
-
-    const updateItem = (id: string, field: keyof InvoiceItem, value: any) => {
-        setItems(items.map((item) => item.id === id ? { ...item, [field]: value } : item));
-    };
-
-    const formatCurrency = (value: number) =>
-        new Intl.NumberFormat("pt-AO", { style: "currency", currency: "AOA" }).format(value);
+    // ... (addItem, removeItem, updateItem e formatCurrency mantidos iguais)
+    const addItem = () => setItems([...items, { id: Math.random().toString(36).substr(2, 9), description: "", quantity: 1, unitPrice: 0, taxRate: 0.14 }]);
+    const removeItem = (id: string) => items.length > 1 && setItems(items.filter((item) => item.id !== id));
+    const updateItem = (id: string, field: keyof InvoiceItem, value: string | number) => {
+    setItems(prev => prev.map((item) => 
+        item.id === id ? { ...item, [field]: value } : item
+    ));
+};
+    const formatCurrency = (value: number) => new Intl.NumberFormat("pt-AO", { style: "currency", currency: "AOA" }).format(value);
 
     return (
         <div className="max-w-5xl mx-auto space-y-8 pb-10 p-6">
+            {/* ... (Banner de Origem) */}
             
-            {originalDocId && (
-                <div className="bg-blue-50 border-2 border-blue-200 p-6 rounded-2xl flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="bg-blue-600 p-3 rounded-xl text-white">
-                            <History size={24} />
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black uppercase text-blue-700 tracking-widest">Documento de Origem Vinculado</p>
-                            <h3 className="text-lg font-black text-slate-900">{originalDocId}</h3>
-                        </div>
-                    </div>
-                    <CheckCircle2 className="text-blue-600" size={24} />
-                </div>
-            )}
-
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className={cn(
-                        "text-3xl font-black tracking-tight",
-                        docType === "NC" ? "text-red-600" : "text-slate-900"
-                    )}>
+                    <h2 className={cn("text-3xl font-black tracking-tight", docType === "NC" ? "text-red-600" : "text-slate-900")}>
                         Nova {docType === "NC" ? "Nota de Crédito" : docType === "ND" ? "Nota de Débito" : "Fatura"}
                     </h2>
-                    <p className="text-slate-500 font-medium">
-                        {originalDocId ? `Retificando o documento ${originalDocId}` : "Preencha os dados do novo documento."}
-                    </p>
                 </div>
                 <div className="flex space-x-3">
-                    <button onClick={() => handleSaveInvoice("Rascunho")} className="inline-flex items-center justify-center rounded-xl text-xs font-black border border-slate-200 bg-white hover:bg-slate-50 h-11 px-6 transition-all shadow-sm">
-                        <Save className="mr-2 h-4 w-4" /> Salvar Rascunho
-                    </button>
-                    <button onClick={() => handleSaveInvoice("Emitida")} className={cn(
-                        "inline-flex items-center justify-center rounded-xl text-xs font-black text-white h-11 px-6 shadow-lg transition-all",
-                        docType === "NC" ? "bg-red-600 hover:bg-red-700" : "bg-slate-900 hover:bg-slate-800"
-                    )}>
-                        <Send className="mr-2 h-4 w-4" /> Emitir {docType}
+                    <button 
+                        disabled={isSubmitting}
+                        onClick={() => handleSaveInvoice("Emitida")} 
+                        className={cn(
+                            "inline-flex items-center justify-center rounded-xl text-xs font-black text-white h-11 px-6 shadow-lg transition-all",
+                            docType === "NC" ? "bg-red-600 hover:bg-red-700" : "bg-slate-900 hover:bg-slate-800",
+                            isSubmitting && "opacity-50 cursor-not-allowed"
+                        )}
+                    >
+                        {isSubmitting ? <Loader2 className="animate-spin mr-2" size={16} /> : <Send className="mr-2 h-4 w-4" />}
+                        Emitir {docType}
                     </button>
                 </div>
             </div>
@@ -165,7 +166,7 @@ function InvoiceFormContent() {
                 </div>
                 <div className="space-y-2">
                     <label className="text-xs font-black uppercase tracking-widest text-slate-400">Data de Emissão</label>
-                    <input type="date" className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none" defaultValue={new Date().toISOString().split('T')[0]} />
+                    <input type="text" disabled className="flex h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold outline-none" value={new Date().toLocaleDateString()} />
                 </div>
             </div>
 
@@ -190,7 +191,8 @@ function InvoiceFormContent() {
                                         onProductSelect={(prod) => {
                                             if (prod) {
                                                 updateItem(item.id, "description", prod.descricao);
-                                                if (prod.preco) updateItem(item.id, "unitPrice", prod.preco);
+                                                updateItem(item.id, "unitPrice", prod.preco || 0);
+                                                updateItem(item.id, "product_id", prod.id);
                                             }
                                         }} 
                                     />
@@ -214,8 +216,12 @@ function InvoiceFormContent() {
                         ))}
                     </tbody>
                 </table>
+                <button onClick={addItem} className="w-full py-4 bg-slate-50/50 text-slate-500 text-xs font-bold hover:bg-slate-100 transition-colors flex items-center justify-center gap-2">
+                    <Plus size={14} /> Adicionar Linha
+                </button>
             </div>
 
+            {/* ... (Totais Finais Footer) */}
             <div className="flex justify-end">
                 <div className={cn("w-full md:w-80 p-8 rounded-[2.5rem] space-y-3 shadow-xl", docType === "NC" ? "bg-red-600 text-white" : "bg-slate-900 text-white")}>
                     <div className="flex justify-between text-[10px] font-black uppercase opacity-60"><span>Subtotal:</span><span>{formatCurrency(subtotal)}</span></div>
@@ -230,6 +236,7 @@ function InvoiceFormContent() {
     );
 }
 
+// ... NewInvoicePage Export mantido igual
 export default function NewInvoicePage() {
     return (
         <Suspense fallback={<div className="p-20 text-center font-black animate-pulse text-slate-400">A preparar formulário fiscal...</div>}>

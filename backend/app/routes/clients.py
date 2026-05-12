@@ -1,46 +1,63 @@
+# backend/app/routes/clients.py
 from flask import Blueprint, request, jsonify
 from app.models.client import Client
-from app.models.core import User # Necessário para buscar a empresa do utilizador
+from app.models.core import User
 from app.extensions import db
 from app.middleware import require_auth
+import traceback
 
 clients_bp = Blueprint('clients', __name__)
 
 def get_local_user():
-    """Auxiliar para buscar o utilizador da DB local usando o ID do Supabase"""
+    """Busca o utilizador local usando o ID injetado pelo middleware"""
     supabase_user = getattr(request, 'current_user', None)
     if not supabase_user:
+        print("DEBUG: Nenhum utilizador encontrado no request (Middleware falhou?)")
         return None
-    return User.query.filter_by(supabase_auth_id=supabase_user.get('id')).first()
+    
+    supabase_id = supabase_user.get('id')
+    user = User.query.filter_by(supabase_auth_id=supabase_id).first()
+    
+    if not user:
+        print(f"DEBUG: Utilizador Supabase {supabase_id} não encontrado na DB local.")
+    return user
 
 @clients_bp.route('/', methods=['GET'])
 @require_auth
-def get_clients(): # REMOVIDO o argumento current_user
+def get_clients():
+    print("🚀 API: Chamada GET /api/clients/ recebida")
     user = get_local_user()
+    
     if not user:
-        return jsonify({"error": "Utilizador não sincronizado"}), 401
+        return jsonify({"error": "Utilizador não sincronizado. Faça login novamente."}), 401
 
-    # Busca apenas os clientes da empresa do utilizador
-    clients = Client.query.filter_by(company_id=user.company_id).all()
-    
-    result = [{
-        "id": c.id,
-        "name": c.name,
-        "nif": c.nif,
-        "address": c.address,
-        "city": c.city,
-        "email": c.email,
-        "phone": c.phone
-    } for c in clients]
-    
-    return jsonify(result), 200
+    try:
+        clients = Client.query.filter_by(company_id=user.company_id).all()
+        print(f"DEBUG: Encontrados {len(clients)} clientes para a empresa {user.company_id}")
+        
+        result = [{
+            "id": c.id,
+            "name": c.name,
+            "nif": c.nif,
+            "address": c.address,
+            "city": c.city,
+            "email": c.email,
+            "phone": c.phone
+        } for c in clients]
+        
+        return jsonify(result), 200
+    except Exception as e:
+        print(f"ERRO GET CLIENTS: {str(e)}")
+        return jsonify({"error": "Erro ao carregar lista"}), 500
 
 @clients_bp.route('/', methods=['POST'])
 @require_auth
-def create_client(): # REMOVIDO o argumento current_user
+def create_client():
     user = get_local_user()
+    if not user:
+        return jsonify({"error": "Não autorizado"}), 401
+
     data = request.get_json()
-    
     if not data or not data.get('name'):
         return jsonify({"error": "O nome do cliente é obrigatório."}), 400
         
@@ -57,22 +74,22 @@ def create_client(): # REMOVIDO o argumento current_user
     try:
         db.session.add(new_client)
         db.session.commit()
-        return jsonify({"message": "Cliente criado com sucesso", "id": new_client.id}), 201
+        print(f"DEBUG: Cliente {new_client.name} criado com sucesso.")
+        return jsonify({"message": "Cliente criado", "id": new_client.id}), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": f"Erro ao criar cliente: {str(e)}"}), 500
+        return jsonify({"error": f"Erro: {str(e)}"}), 500
 
 @clients_bp.route('/<client_id>', methods=['PUT'])
 @require_auth
-def update_client(client_id): # REMOVIDO o argumento current_user
+def update_client(client_id):
     user = get_local_user()
     client = Client.query.filter_by(id=client_id, company_id=user.company_id).first()
     
     if not client:
-        return jsonify({"error": "Cliente não encontrado ou sem permissão."}), 404
+        return jsonify({"error": "Cliente não encontrado"}), 404
         
     data = request.get_json()
-    
     client.name = data.get('name', client.name)
     client.nif = data.get('nif', client.nif)
     client.address = data.get('address', client.address)
@@ -81,21 +98,21 @@ def update_client(client_id): # REMOVIDO o argumento current_user
     client.phone = data.get('phone', client.phone)
         
     db.session.commit()
-    return jsonify({"message": "Cliente atualizado com sucesso"}), 200
+    return jsonify({"message": "Atualizado"}), 200
 
 @clients_bp.route('/<client_id>', methods=['DELETE'])
 @require_auth
-def delete_client(client_id): # REMOVIDO o argumento current_user
+def delete_client(client_id):
     user = get_local_user()
     client = Client.query.filter_by(id=client_id, company_id=user.company_id).first()
     
     if not client:
-        return jsonify({"error": "Cliente não encontrado."}), 404
+        return jsonify({"error": "Não encontrado"}), 404
     
     try:
         db.session.delete(client)
         db.session.commit()
-        return jsonify({"message": "Cliente eliminado com sucesso"}), 200
+        return jsonify({"message": "Eliminado"}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": "Erro ao eliminar: O cliente pode ter faturas associadas."}), 400
+        return jsonify({"error": f"Erro ao eliminar: {str(e)}"}), 400
